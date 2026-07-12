@@ -1,9 +1,10 @@
-import React, { useEffect, useState } from 'react';
+import React, { useEffect, useState, useRef } from 'react';
 import { useParams, useNavigate } from 'react-router-dom';
 import { ChevronLeft, Settings, CheckCircle2, Grid, Award, LogOut, X, Check, MessageSquare, PhoneCall, Camera } from 'lucide-react';
 import { useProfileStore } from '../store/profileStore';
 import { useAuthStore } from '../store/authStore';
 import { useFeedStore } from '../store/feedStore';
+import { uploadToCloudinary } from '../../data/services/cloudinary';
 
 import { Text } from '../components/ui/Text';
 import { Button } from '../components/ui/Button';
@@ -25,62 +26,44 @@ export const ProfileScreen: React.FC = () => {
   const [selectedImg, setSelectedImg] = useState<string | null>(null);
   const [caption, setCaption] = useState('');
   const [tagsStr, setTagsStr] = useState('');
+  const selectedFileRef = useRef<File | null>(null);
   const [isUploading, setIsUploading] = useState(false);
 
-  const handleImageSelect = async (e: React.ChangeEvent<HTMLInputElement>) => {
-    if (!e.target.files || e.target.files.length === 0) return;
-    const file = e.target.files[0];
-    
-    // Set local object URL for instant preview!
-    const localUrl = URL.createObjectURL(file);
-    setSelectedImg(localUrl);
-    
-    setIsUploading(true);
-    try {
-      const CLOUDINARY_CLOUD_NAME = import.meta.env.VITE_CLOUDINARY_CLOUD_NAME || 'dt2uxy746';
-      const CLOUDINARY_UPLOAD_PRESET = import.meta.env.VITE_CLOUDINARY_UPLOAD_PRESET || 'YOUR_UPLOAD_PRESET';
-      
-      if (!CLOUDINARY_UPLOAD_PRESET || CLOUDINARY_UPLOAD_PRESET === 'YOUR_UPLOAD_PRESET') {
-        throw new Error('Fallback to local preview');
-      }
-      
-      const formData = new FormData();
-      formData.append('file', file);
-      formData.append('upload_preset', CLOUDINARY_UPLOAD_PRESET);
-
-      const res = await fetch(`https://api.cloudinary.com/v1_1/${CLOUDINARY_CLOUD_NAME}/image/upload`, {
-        method: 'POST',
-        body: formData,
-      });
-      const data = await res.json();
-      
-      if (data.secure_url) {
-        setSelectedImg(data.secure_url);
-      }
-    } catch (err) {
-      console.warn('Network upload fallback. Keeping local URL:', err);
-    } finally {
-      setIsUploading(false);
-    }
+  const handleImageSelect = (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0];
+    if (!file) return;
+    selectedFileRef.current = file;
+    // Instant local preview — no network call yet
+    setSelectedImg(URL.createObjectURL(file));
   };
 
   const handlePublish = async (e: React.FormEvent) => {
     e.preventDefault();
-    if (!profileUser || !selectedImg) {
+    if (!profileUser || (!selectedImg && !selectedFileRef.current)) {
       alert('Please select an image first.');
       return;
     }
+
+    setIsUploading(true);
+    let finalUrl = selectedImg!;
+    try {
+      if (selectedFileRef.current) {
+        finalUrl = await uploadToCloudinary(selectedFileRef.current);
+        selectedFileRef.current = null;
+      }
+    } finally {
+      setIsUploading(false);
+    }
+
     const hashtags = tagsStr
       .split(' ')
       .filter((h) => h.startsWith('#'))
       .map((h) => h.trim());
 
-    await createPost(profileUser.uid, profileUser.name, profileUser.profilePhoto, selectedImg, caption, hashtags);
-    
-    // Refresh user profile details & grid
+    await createPost(profileUser.uid, profileUser.name, profileUser.profilePhoto, finalUrl, caption, hashtags);
+
+    // Refresh profile grid & close drawer
     await loadProfile(targetId, currentUserId);
-    
-    // Clear states & close drawer
     setSelectedImg(null);
     setCaption('');
     setTagsStr('');

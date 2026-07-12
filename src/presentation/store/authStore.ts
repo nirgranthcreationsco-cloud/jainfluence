@@ -11,7 +11,7 @@ interface AuthState {
   initSession: () => Promise<void>;
   setCompletedOnboarding: () => void;
   login: (phone: string, name: string) => Promise<boolean>;
-  signup: (phone: string, name: string, username: string) => Promise<boolean>;
+  signup: (phone: string, name: string, username: string, profilePhoto?: string) => Promise<boolean>;
   logout: () => void;
 }
 
@@ -69,7 +69,7 @@ export const useAuthStore = create<AuthState>((set) => ({
     }
   },
 
-  signup: async (phone: string, name: string, username: string) => {
+  signup: async (phone: string, name: string, username: string, profilePhoto?: string) => {
     set({ isLoading: true, error: '' });
     try {
       const users = await StorageService.getUsers();
@@ -90,6 +90,7 @@ export const useAuthStore = create<AuthState>((set) => ({
         username,
         phone,
         bio: 'Proud member of the Jain community.',
+        profilePhoto,
         skills: [],
         followersCount: 0,
         followingCount: 0,
