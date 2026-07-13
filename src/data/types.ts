@@ -17,17 +17,33 @@ export interface UserModel {
   hireCount: number;
 }
 
-export interface PostModel {
-  postId: string;
+export type ActivityType =
+  | 'photo'
+  | 'video'
+  | 'event'
+  | 'article'
+  | 'opportunity'
+  | 'project'
+  | 'announcement'
+  | 'achievement';
+
+/** Represents a single community activity / contribution. */
+export interface ActivityModel {
+  postId: string;        // kept as-is so Supabase column name stays stable
   authorId: string;
   authorName: string;
   authorPhoto?: string;
   mediaUrls: string[];
   caption?: string;
   hashtags: string[];
+  activityType: ActivityType;
   likesCount: number;
   commentsCount: number;
   timestamp: string;
-  status: 'live' | 'archived';
+  /** 'live' | 'archived' | 'pending' — pending = optimistic, not yet confirmed */
+  status: 'live' | 'archived' | 'pending';
   engagementScore: number;
 }
+
+/** @deprecated Use ActivityModel */
+export type PostModel = ActivityModel;

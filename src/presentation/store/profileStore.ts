@@ -1,10 +1,10 @@
 import { create } from 'zustand';
-import type { UserModel, PostModel } from '../../data/types';
+import type { UserModel, ActivityModel } from '../../data/types';
 import { StorageService } from '../../data/services/storage';
 
 interface ProfileState {
   profileUser: UserModel | null;
-  posts: PostModel[];
+  posts: ActivityModel[];
   isLoading: boolean;
   isFollowing: boolean;
   loadProfile: (userId: string, currentUserId: string) => Promise<void>;

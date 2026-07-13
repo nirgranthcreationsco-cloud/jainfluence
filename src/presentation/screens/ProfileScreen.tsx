@@ -4,7 +4,7 @@ import { ChevronLeft, Settings, CheckCircle2, Grid, Award, LogOut, X, Check, Mes
 import { useProfileStore } from '../store/profileStore';
 import { useAuthStore } from '../store/authStore';
 import { useFeedStore } from '../store/feedStore';
-import { uploadToCloudinary } from '../../data/services/cloudinary';
+import type { ActivityType } from '../../data/types';
 
 import { Text } from '../components/ui/Text';
 import { Button } from '../components/ui/Button';
@@ -19,9 +19,11 @@ export const ProfileScreen: React.FC = () => {
 
   const { profileUser, posts, isLoading, isFollowing, loadProfile, toggleFollow } = useProfileStore();
   const [showSettingsDrawer, setShowSettingsDrawer] = useState(false);
-  
-  // Publication Drawer states
-  const createPost = useFeedStore((state) => state.createPost);
+
+  // Create drawer states
+  const { createActivity, uploadProgress } = useFeedStore();
+  const [showTypePicker, setShowTypePicker] = useState(false);
+  const [selectedActivityType, setSelectedActivityType] = useState<ActivityType>('photo');
   const [showPublishDrawer, setShowPublishDrawer] = useState(false);
   const [selectedImg, setSelectedImg] = useState<string | null>(null);
   const [caption, setCaption] = useState('');
@@ -39,31 +41,29 @@ export const ProfileScreen: React.FC = () => {
 
   const handlePublish = async (e: React.FormEvent) => {
     e.preventDefault();
-    if (!profileUser || (!selectedImg && !selectedFileRef.current)) {
+    if (!profileUser || !selectedFileRef.current) {
       alert('Please select an image first.');
       return;
     }
 
     setIsUploading(true);
-    let finalUrl = selectedImg!;
     try {
-      if (selectedFileRef.current) {
-        finalUrl = await uploadToCloudinary(selectedFileRef.current);
-        selectedFileRef.current = null;
-      }
+      await createActivity(
+        profileUser.uid,
+        profileUser.name,
+        profileUser.profilePhoto,
+        selectedFileRef.current,
+        caption,
+        tagsStr.split(' ').filter(h => h.startsWith('#')).map(h => h.trim()),
+        selectedActivityType,
+      );
     } finally {
       setIsUploading(false);
     }
 
-    const hashtags = tagsStr
-      .split(' ')
-      .filter((h) => h.startsWith('#'))
-      .map((h) => h.trim());
-
-    await createPost(profileUser.uid, profileUser.name, profileUser.profilePhoto, finalUrl, caption, hashtags);
-
-    // Refresh profile grid & close drawer
+    // Refresh profile grid & close
     await loadProfile(targetId, currentUserId);
+    selectedFileRef.current = null;
     setSelectedImg(null);
     setCaption('');
     setTagsStr('');
@@ -237,16 +237,16 @@ export const ProfileScreen: React.FC = () => {
                   Edit Identity
                 </Button>
                 <Button 
-                  variant="primary" 
-                  onClick={() => setShowPublishDrawer(true)}
-                  style={{ 
-                    height: '36px', 
-                    borderRadius: 'var(--radius-sm)', 
+                  variant="primary"
+                  onClick={() => setShowTypePicker(true)}
+                  style={{
+                    height: '36px',
+                    borderRadius: 'var(--radius-sm)',
                     fontSize: 'var(--text-sm)',
                     fontWeight: 600
                   }}
                 >
-                  + Publish Work
+                  ＋ Create
                 </Button>
               </div>
             ) : (
@@ -600,8 +600,88 @@ export const ProfileScreen: React.FC = () => {
         </div>
       )}
 
-      {/* Elegant Viewfinder Shutter Drawer for Portfolio Publish */}
+      {/* Activity Type Picker Sheet */}
+      {showTypePicker && (
+        <div
+          style={{
+            position: 'fixed',
+            top: 0, left: 0, right: 0, bottom: 0,
+            backgroundColor: 'rgba(0,0,0,0.3)',
+            backdropFilter: 'blur(4px)',
+            WebkitBackdropFilter: 'blur(4px)',
+            zIndex: 9999,
+            display: 'flex',
+            alignItems: 'flex-end',
+            justifyContent: 'center',
+            animation: 'pageFadeIn 0.2s ease'
+          }}
+        >
+          <div style={{ position: 'absolute', top: 0, left: 0, right: 0, bottom: 0 }} onClick={() => setShowTypePicker(false)} />
+          <div
+            style={{
+              position: 'relative',
+              width: '100%',
+              maxWidth: '480px',
+              backgroundColor: 'var(--color-bg-surface)',
+              borderRadius: 'var(--radius-lg) var(--radius-lg) 0 0',
+              padding: 'var(--space-6) var(--space-5) calc(var(--space-8) + 12px)',
+              zIndex: 10000,
+              boxShadow: '0 -8px 32px rgba(0,0,0,0.1)'
+            }}
+          >
+            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 'var(--space-5)' }}>
+              <Text variant="h3" style={{ fontWeight: 700 }}>What are you sharing?</Text>
+              <button
+                onClick={() => setShowTypePicker(false)}
+                style={{ border: 'none', background: 'rgba(17,17,17,0.05)', width: '32px', height: '32px', borderRadius: '50%', display: 'flex', alignItems: 'center', justifyContent: 'center', cursor: 'pointer' }}
+              >
+                <X size={16} />
+              </button>
+            </div>
+
+            <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 'var(--space-3)' }}>
+              {([
+                { type: 'photo' as ActivityType, emoji: '📷', label: 'Photo' },
+                { type: 'project' as ActivityType, emoji: '🎨', label: 'Project' },
+                { type: 'article' as ActivityType, emoji: '📝', label: 'Article' },
+                { type: 'event' as ActivityType, emoji: '📅', label: 'Event' },
+                { type: 'opportunity' as ActivityType, emoji: '💼', label: 'Opportunity' },
+                { type: 'announcement' as ActivityType, emoji: '📍', label: 'Announcement' },
+              ]).map(({ type, emoji, label }) => (
+                <button
+                  key={type}
+                  onClick={() => {
+                    setSelectedActivityType(type);
+                    setShowTypePicker(false);
+                    setShowPublishDrawer(true);
+                  }}
+                  style={{
+                    display: 'flex',
+                    alignItems: 'center',
+                    gap: 'var(--space-3)',
+                    padding: 'var(--space-4)',
+                    borderRadius: 'var(--radius-md)',
+                    border: '1px solid rgba(17,17,17,0.06)',
+                    backgroundColor: 'var(--color-bg-base)',
+                    cursor: 'pointer',
+                    transition: 'all 0.15s ease',
+                    fontFamily: 'var(--font-family)',
+                  }}
+                  onPointerDown={e => (e.currentTarget.style.transform = 'scale(0.97)')}
+                  onPointerUp={e => (e.currentTarget.style.transform = 'scale(1)')}
+                >
+                  <span style={{ fontSize: '22px' }}>{emoji}</span>
+                  <Text variant="body" style={{ fontWeight: 600, fontSize: '14px' }}>{label}</Text>
+                </button>
+              ))}
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* Create / Publish Drawer */}
       {showPublishDrawer && (
+
         <div 
           style={{
             position: 'fixed',
@@ -636,7 +716,7 @@ export const ProfileScreen: React.FC = () => {
             }}
           >
             <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 'var(--space-2)' }}>
-              <Text variant="h3" style={{ fontWeight: 700 }}>Publish Portfolio Work</Text>
+              <Text variant="h3" style={{ fontWeight: 700 }}>Share {selectedActivityType === 'photo' ? 'a Photo' : selectedActivityType === 'project' ? 'a Project' : selectedActivityType === 'event' ? 'an Event' : selectedActivityType === 'announcement' ? 'an Announcement' : selectedActivityType === 'opportunity' ? 'an Opportunity' : selectedActivityType === 'article' ? 'an Article' : 'Work'}</Text>
               <button 
                 type="button"
                 onClick={() => setShowPublishDrawer(false)}
@@ -780,18 +860,34 @@ export const ProfileScreen: React.FC = () => {
               />
             </div>
 
+            {/* Upload progress bar — shown during active upload */}
+            {uploadProgress && uploadProgress.stage !== 'done' && (
+              <div style={{ display: 'flex', flexDirection: 'column', gap: '6px' }}>
+                <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+                  <span style={{ fontSize: '11px', fontWeight: 700, color: 'var(--color-text-secondary)', textTransform: 'uppercase', letterSpacing: '0.5px' }}>
+                    {uploadProgress.stage === 'compressing' ? 'Compressing...' : 'Uploading...'}
+                  </span>
+                  <span style={{ fontSize: '11px', fontWeight: 700, color: 'var(--color-accent-gold)' }}>
+                    {uploadProgress.progress}%
+                  </span>
+                </div>
+                <div className="upload-progress-track">
+                  <div
+                    className="upload-progress-fill"
+                    style={{ width: `${uploadProgress.progress}%` }}
+                  />
+                </div>
+              </div>
+            )}
+
             <Button
               type="submit"
               variant="primary"
               fullWidth
-              disabled={!selectedImg}
-              style={{
-                height: '48px',
-                borderRadius: 'var(--radius-sm)',
-                marginTop: 'var(--space-2)'
-              }}
+              disabled={!selectedImg || isUploading}
+              style={{ height: '48px', borderRadius: 'var(--radius-sm)', marginTop: 'var(--space-2)' }}
             >
-              Publish Portfolio Work
+              {isUploading ? 'Publishing...' : 'Publish'}
             </Button>
           </form>
         </div>

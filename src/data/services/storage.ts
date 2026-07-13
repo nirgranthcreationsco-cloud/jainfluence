@@ -1,4 +1,4 @@
-import type { UserModel, PostModel } from '../types';
+import type { UserModel, ActivityModel } from '../types';
 import { supabase } from './supabaseClient';
 
 export class StorageService {
@@ -57,7 +57,7 @@ export class StorageService {
   }
 
   // Posts Database
-  static async getPosts(): Promise<PostModel[]> {
+  static async getPosts(): Promise<ActivityModel[]> {
     const { data, error } = await supabase
       .from('posts')
       .select('*')
@@ -67,15 +67,15 @@ export class StorageService {
       console.error('Error fetching posts:', error);
       return [];
     }
-    return data as PostModel[];
+    return data as ActivityModel[];
   }
 
-  static async savePost(post: PostModel): Promise<void> {
+  static async savePost(post: ActivityModel): Promise<void> {
     const { error } = await supabase.from('posts').upsert(post);
     if (error) console.error('Error saving post:', error);
   }
 
-  static async saveAllPosts(posts: PostModel[]): Promise<void> {
+  static async saveAllPosts(posts: ActivityModel[]): Promise<void> {
     const { error } = await supabase.from('posts').upsert(posts);
     if (error) console.error('Error saving all posts:', error);
   }
