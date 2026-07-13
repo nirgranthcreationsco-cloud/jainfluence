@@ -12,7 +12,9 @@ import { Button } from '../components/ui/Button';
 export const ProfileScreen: React.FC = () => {
   const { id } = useParams<{ id: string }>();
   const navigate = useNavigate();
-  const currentUserId = useAuthStore((state) => state.user?.uid) || '';
+  const currentUser = useAuthStore((state) => state.user);
+  const currentUserId = currentUser?.uid ?? '';
+  const isInitializing = useAuthStore((state) => state.isInitializing);
   const logout = useAuthStore((state) => state.logout);
   const targetId = id || currentUserId;
   const isOwn = targetId === currentUserId;
@@ -35,7 +37,6 @@ export const ProfileScreen: React.FC = () => {
     const file = e.target.files?.[0];
     if (!file) return;
     selectedFileRef.current = file;
-    // Instant local preview — no network call yet
     setSelectedImg(URL.createObjectURL(file));
   };
 
@@ -61,7 +62,6 @@ export const ProfileScreen: React.FC = () => {
       setIsUploading(false);
     }
 
-    // Refresh profile grid & close
     await loadProfile(targetId, currentUserId);
     selectedFileRef.current = null;
     setSelectedImg(null);
@@ -70,18 +70,21 @@ export const ProfileScreen: React.FC = () => {
     setShowPublishDrawer(false);
   };
 
+  // Only load profile once auth is resolved and we have a real ID
   useEffect(() => {
-    if (targetId) {
+    if (!isInitializing && targetId) {
       loadProfile(targetId, currentUserId);
     }
-  }, [targetId, currentUserId, loadProfile]);
+  }, [targetId, currentUserId, isInitializing, loadProfile]);
 
   const handleLogout = () => {
+    setShowSettingsDrawer(false);
     logout();
     navigate('/login');
   };
 
-  if (isLoading || !profileUser) {
+  // Show skeleton if auth is still initializing or profile is loading
+  if (isInitializing || isLoading || !profileUser) {
     return (
       <div style={{ display: 'flex', flexDirection: 'column', gap: 'var(--space-6)', padding: 'var(--space-5)', backgroundColor: 'var(--color-bg-base)', minHeight: '100vh' }}>
         <div className="shimmer" style={{ width: '100%', height: '200px', borderRadius: 'var(--radius-lg)' }} />
@@ -224,17 +227,18 @@ export const ProfileScreen: React.FC = () => {
           <div style={{ paddingBottom: 'var(--space-1)' }}>
             {isOwn ? (
               <div style={{ display: 'flex', gap: 'var(--space-2)' }}>
-                <Button 
-                  variant="secondary" 
-                  style={{ 
-                    height: '36px', 
-                    borderRadius: 'var(--radius-sm)', 
+                <Button
+                  variant="secondary"
+                  onClick={() => setShowSettingsDrawer(true)}
+                  style={{
+                    height: '36px',
+                    borderRadius: 'var(--radius-sm)',
                     fontSize: 'var(--text-sm)',
                     fontWeight: 600,
                     border: '1px solid rgba(17, 17, 17, 0.08)'
                   }}
                 >
-                  Edit Identity
+                  Edit Profile
                 </Button>
                 <Button 
                   variant="primary"
