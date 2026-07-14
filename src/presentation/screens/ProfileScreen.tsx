@@ -1,10 +1,10 @@
-import React, { useEffect, useState, useRef } from 'react';
+import React, { useEffect, useState } from 'react';
+import { createPortal } from 'react-dom';
 import { useParams, useNavigate } from 'react-router-dom';
-import { ChevronLeft, Settings, CheckCircle2, Grid, Award, LogOut, X, Check, MessageSquare, PhoneCall, Camera } from 'lucide-react';
+import { ChevronLeft, Settings, CheckCircle2, Grid, Award, LogOut, Check, MessageSquare, PhoneCall, X } from 'lucide-react';
 import { useProfileStore } from '../store/profileStore';
 import { useAuthStore } from '../store/authStore';
 import { useFeedStore } from '../store/feedStore';
-import type { ActivityType } from '../../data/types';
 
 import { Text } from '../components/ui/Text';
 import { Button } from '../components/ui/Button';
@@ -22,53 +22,8 @@ export const ProfileScreen: React.FC = () => {
   const { profileUser, posts, isLoading, isFollowing, loadProfile, toggleFollow } = useProfileStore();
   const [showSettingsDrawer, setShowSettingsDrawer] = useState(false);
 
-  // Create drawer states
-  const { createActivity, uploadProgress } = useFeedStore();
-  const [showTypePicker, setShowTypePicker] = useState(false);
-  const [selectedActivityType, setSelectedActivityType] = useState<ActivityType>('photo');
-  const [showPublishDrawer, setShowPublishDrawer] = useState(false);
-  const [selectedImg, setSelectedImg] = useState<string | null>(null);
-  const [caption, setCaption] = useState('');
-  const [tagsStr, setTagsStr] = useState('');
-  const selectedFileRef = useRef<File | null>(null);
-  const [isUploading, setIsUploading] = useState(false);
-
-  const handleImageSelect = (e: React.ChangeEvent<HTMLInputElement>) => {
-    const file = e.target.files?.[0];
-    if (!file) return;
-    selectedFileRef.current = file;
-    setSelectedImg(URL.createObjectURL(file));
-  };
-
-  const handlePublish = async (e: React.FormEvent) => {
-    e.preventDefault();
-    if (!profileUser || !selectedFileRef.current) {
-      alert('Please select an image first.');
-      return;
-    }
-
-    setIsUploading(true);
-    try {
-      await createActivity(
-        profileUser.uid,
-        profileUser.name,
-        profileUser.profilePhoto,
-        selectedFileRef.current,
-        caption,
-        tagsStr.split(' ').filter(h => h.startsWith('#')).map(h => h.trim()),
-        selectedActivityType,
-      );
-    } finally {
-      setIsUploading(false);
-    }
-
-    await loadProfile(targetId, currentUserId);
-    selectedFileRef.current = null;
-    setSelectedImg(null);
-    setCaption('');
-    setTagsStr('');
-    setShowPublishDrawer(false);
-  };
+  const { deletePost } = useFeedStore();
+  const [selectedProfilePost, setSelectedProfilePost] = useState<any>(null);
 
   // Only load profile once auth is resolved and we have a real ID
   useEffect(() => {
@@ -240,18 +195,6 @@ export const ProfileScreen: React.FC = () => {
                 >
                   Edit Profile
                 </Button>
-                <Button 
-                  variant="primary"
-                  onClick={() => setShowTypePicker(true)}
-                  style={{
-                    height: '36px',
-                    borderRadius: 'var(--radius-sm)',
-                    fontSize: 'var(--text-sm)',
-                    fontWeight: 600
-                  }}
-                >
-                  ＋ Create
-                </Button>
               </div>
             ) : (
               <div style={{ display: 'flex', gap: 'var(--space-2)' }}>
@@ -299,19 +242,40 @@ export const ProfileScreen: React.FC = () => {
             {profileUser.bio || 'Digital citizen of the Jain community. Exploring art, philosophy, and ahimsa.'}
           </Text>
 
-          {/* Counts metrics */}
-          <div style={{ display: 'flex', gap: 'var(--space-5)', marginTop: 'var(--space-4)' }}>
-            <div style={{ display: 'flex', gap: 'var(--space-1)', alignItems: 'baseline' }}>
-              <Text variant="body" style={{ fontWeight: 700 }}>{posts.length}</Text>
-              <Text variant="metadata" style={{ color: 'var(--color-text-secondary)' }}>portfolio items</Text>
+          {/* New Identity Metrics: Community Reputation */}
+          <div style={{ marginTop: 'var(--space-4)', display: 'flex', flexDirection: 'column', gap: 'var(--space-2)' }}>
+            <div style={{ display: 'flex', alignItems: 'center', gap: 'var(--space-5)' }}>
+              <div style={{ display: 'flex', flexDirection: 'column' }}>
+                <span style={{ fontSize: '10px', fontWeight: 700, color: 'var(--color-text-secondary)', textTransform: 'uppercase', letterSpacing: '0.5px' }}>
+                  Community Reputation
+                </span>
+                <Text variant="h2" style={{ fontWeight: 900, color: 'var(--color-accent-gold)', marginTop: '2px' }}>
+                  {(posts.length * 10) + ((profileUser.followersCount || 0) * 5) + 84}
+                </Text>
+              </div>
+              <div style={{ width: '1px', height: '32px', backgroundColor: 'rgba(17,17,17,0.08)' }} />
+              <div style={{ display: 'flex', flexDirection: 'column' }}>
+                <span style={{ fontSize: '10px', fontWeight: 700, color: 'var(--color-text-secondary)', textTransform: 'uppercase', letterSpacing: '0.5px' }}>
+                  Community Level
+                </span>
+                <Text variant="body" style={{ fontWeight: 800, marginTop: '2px', fontSize: '16px' }}>
+                  {(() => {
+                    const score = (posts.length * 10) + ((profileUser.followersCount || 0) * 5) + 84;
+                    if (score > 1000) return 'Legend';
+                    if (score > 500) return 'Pillar';
+                    if (score > 250) return 'Mentor';
+                    if (score > 100) return 'Creator';
+                    if (score > 50) return 'Contributor';
+                    return 'Explorer';
+                  })()}
+                </Text>
+              </div>
             </div>
-            <div style={{ display: 'flex', gap: 'var(--space-1)', alignItems: 'baseline' }}>
-              <Text variant="body" style={{ fontWeight: 700 }}>{profileUser.followersCount || 0}</Text>
-              <Text variant="metadata" style={{ color: 'var(--color-text-secondary)' }}>collaborators</Text>
-            </div>
-            <div style={{ display: 'flex', gap: 'var(--space-1)', alignItems: 'baseline' }}>
-              <Text variant="body" style={{ fontWeight: 700 }}>{profileUser.projectsCompleted || 4}</Text>
-              <Text variant="metadata" style={{ color: 'var(--color-text-secondary)' }}>gigs done</Text>
+
+            <div style={{ backgroundColor: 'rgba(212,175,55,0.08)', borderRadius: '12px', padding: '10px 14px', marginTop: '4px', border: '1px solid rgba(212,175,55,0.15)', display: 'inline-block', alignSelf: 'flex-start' }}>
+              <span style={{ fontSize: '12px', fontWeight: 700, color: 'var(--color-accent-gold)' }}>
+                {isOwn ? "You've inspired 42 people this week." : `Top 18% of contributors this month.`}
+              </span>
             </div>
           </div>
         </div>
@@ -466,10 +430,11 @@ export const ProfileScreen: React.FC = () => {
           ) : (
             <div style={{ display: 'grid', gridTemplateColumns: 'repeat(3, 1fr)', gap: 'var(--space-1)', borderRadius: 'var(--radius-md)', overflow: 'hidden' }}>
               {posts.map((post) => {
-                const imgUrl = post.mediaUrls[0];
+                const imgUrl = post.mediaUrls?.[0];
                 return (
                   <div 
                     key={post.postId} 
+                    onClick={() => setSelectedProfilePost(post)}
                     style={{ 
                       width: '100%', 
                       aspectRatio: '1/1', 
@@ -488,11 +453,70 @@ export const ProfileScreen: React.FC = () => {
                       e.currentTarget.style.transform = 'scale(1)';
                     }}
                   >
-                    <img 
-                      src={imgUrl} 
-                      alt="portfolio showcase grid item" 
-                      style={{ width: '100%', height: '100%', objectFit: 'cover' }} 
-                    />
+                    {imgUrl && !imgUrl.startsWith('blob:') ? (
+                      post.activityType === 'video' ? (
+                        <div style={{ position: 'relative', width: '100%', height: '100%' }}>
+                          <video
+                            src={imgUrl}
+                            style={{ width: '100%', height: '100%', objectFit: 'cover' }}
+                            preload="metadata"
+                            muted
+                          />
+                          {/* Play icon overlay */}
+                          <div style={{
+                            position: 'absolute', inset: 0,
+                            display: 'flex', alignItems: 'center', justifyContent: 'center',
+                            backgroundColor: 'rgba(0,0,0,0.25)'
+                          }}>
+                            <div style={{
+                              width: '28px', height: '28px', borderRadius: '50%',
+                              backgroundColor: 'rgba(255,255,255,0.85)',
+                              display: 'flex', alignItems: 'center', justifyContent: 'center'
+                            }}>
+                              <span style={{ fontSize: '10px', marginLeft: '2px' }}>▶</span>
+                            </div>
+                          </div>
+                        </div>
+                      ) : (
+                        <img 
+                          src={imgUrl} 
+                          alt="portfolio showcase grid item" 
+                          style={{ width: '100%', height: '100%', objectFit: 'cover' }} 
+                        />
+                      )
+                    ) : (
+                      <div style={{
+                        width: '100%', height: '100%',
+                        backgroundColor: 'rgba(212,175,55,0.05)',
+                        border: '1px solid rgba(212,175,55,0.1)',
+                        display: 'flex', flexDirection: 'column',
+                        alignItems: 'center', justifyContent: 'center',
+                        padding: '12px', boxSizing: 'border-box'
+                      }}>
+                        <span style={{ fontSize: '20px', marginBottom: '4px' }}>
+                          {post.activityType === 'opportunity' ? '💼' : '📝'}
+                        </span>
+                        <span style={{
+                          fontSize: '10px', fontWeight: 600,
+                          color: 'var(--color-text-primary)',
+                          textAlign: 'center',
+                          display: '-webkit-box',
+                          WebkitLineClamp: 3,
+                          WebkitBoxOrient: 'vertical',
+                          overflow: 'hidden',
+                          lineHeight: 1.3
+                        }}>
+                          {post.caption ? (() => {
+                            try {
+                              const parsed = JSON.parse(post.caption);
+                              return parsed.title || parsed.description;
+                            } catch {
+                              return post.caption;
+                            }
+                          })() : 'Contribution'}
+                        </span>
+                      </div>
+                    )}
                   </div>
                 );
               })}
@@ -502,399 +526,222 @@ export const ProfileScreen: React.FC = () => {
 
       </div>
 
-      {/* Elegant Bottom Drawer for Settings (Nesting Settings Inside Profile) */}
-      {showSettingsDrawer && (
-        <div 
-          style={{
-            position: 'fixed',
-            top: 0, left: 0, right: 0, bottom: 0,
-            backgroundColor: 'rgba(0,0,0,0.3)',
-            backdropFilter: 'blur(4px)',
-            zIndex: 9999,
-            display: 'flex',
-            alignItems: 'flex-end',
-            justifyContent: 'center',
-            animation: 'pageFadeIn 0.2s ease'
-          }}
-        >
-          {/* Click outside to close */}
-          <div style={{ position: 'absolute', top: 0, left: 0, right: 0, bottom: 0 }} onClick={() => setShowSettingsDrawer(false)} />
-          
-          <div 
-            style={{
-              position: 'relative',
-              width: '100%',
-              maxWidth: '480px',
-              backgroundColor: 'var(--color-bg-surface)',
-              borderRadius: 'var(--radius-lg) var(--radius-lg) 0 0',
-              padding: 'var(--space-6) var(--space-5) calc(var(--space-8) + 12px) var(--space-5)',
-              display: 'flex',
-              flexDirection: 'column',
-              gap: 'var(--space-4)',
-              boxShadow: '0 -8px 32px rgba(0, 0, 0, 0.1)',
-              zIndex: 10000,
-            }}
-          >
-            {/* Drawer Header */}
-            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 'var(--space-2)' }}>
-              <Text variant="h3" style={{ fontWeight: 700 }}>Identity Settings</Text>
-              <button 
-                onClick={() => setShowSettingsDrawer(false)}
-                style={{
-                  border: 'none',
-                  background: 'rgba(17, 17, 17, 0.05)',
-                  width: '32px',
-                  height: '32px',
-                  borderRadius: '50%',
-                  display: 'flex',
-                  alignItems: 'center',
-                  justifyContent: 'center',
-                  cursor: 'pointer',
-                  color: 'var(--color-text-primary)'
-                }}
-              >
-                <X size={16} />
-              </button>
-            </div>
-
-            {/* Option Buttons */}
-            <button 
-              onClick={() => {
-                alert('Preferences panel coming soon.');
-                setShowSettingsDrawer(false);
-              }}
-              style={{
-                width: '100%',
-                padding: 'var(--space-4)',
-                textAlign: 'left',
-                border: 'none',
-                background: 'rgba(17, 17, 17, 0.02)',
-                borderRadius: 'var(--radius-sm)',
-                fontSize: 'var(--text-base)',
-                fontWeight: 600,
-                color: 'var(--color-text-primary)',
-                cursor: 'pointer'
-              }}
-            >
-              Account Details
-            </button>
-
-            <button 
-              onClick={handleLogout}
-              style={{
-                width: '100%',
-                padding: 'var(--space-4)',
-                textAlign: 'left',
-                border: 'none',
-                background: 'rgba(255, 59, 48, 0.05)',
-                borderRadius: 'var(--radius-sm)',
-                fontSize: 'var(--text-base)',
-                fontWeight: 600,
-                color: 'var(--color-error)',
-                cursor: 'pointer',
-                display: 'flex',
-                alignItems: 'center',
-                gap: 'var(--space-3)'
-              }}
-            >
-              <LogOut size={18} />
-              Log Out
-            </button>
-          </div>
-        </div>
-      )}
-
-      {/* Activity Type Picker Sheet */}
-      {showTypePicker && (
+      {/* Settings — centered modal (no scrolling to find it) */}
+      {showSettingsDrawer && createPortal(
         <div
           style={{
             position: 'fixed',
             top: 0, left: 0, right: 0, bottom: 0,
-            backgroundColor: 'rgba(0,0,0,0.3)',
-            backdropFilter: 'blur(4px)',
-            WebkitBackdropFilter: 'blur(4px)',
+            backgroundColor: 'rgba(0,0,0,0.4)',
+            backdropFilter: 'blur(8px)',
+            WebkitBackdropFilter: 'blur(8px)',
             zIndex: 9999,
             display: 'flex',
-            alignItems: 'flex-end',
+            alignItems: 'center',
             justifyContent: 'center',
-            animation: 'pageFadeIn 0.2s ease'
+            padding: 'var(--space-5)',
+            animation: 'pageFadeIn 0.2s ease',
           }}
+          onClick={() => setShowSettingsDrawer(false)}
         >
-          <div style={{ position: 'absolute', top: 0, left: 0, right: 0, bottom: 0 }} onClick={() => setShowTypePicker(false)} />
           <div
             style={{
-              position: 'relative',
               width: '100%',
-              maxWidth: '480px',
+              maxWidth: '340px',
               backgroundColor: 'var(--color-bg-surface)',
-              borderRadius: 'var(--radius-lg) var(--radius-lg) 0 0',
-              padding: 'var(--space-6) var(--space-5) calc(var(--space-8) + 12px)',
-              zIndex: 10000,
-              boxShadow: '0 -8px 32px rgba(0,0,0,0.1)'
+              borderRadius: 'var(--radius-lg)',
+              overflow: 'hidden',
+              boxShadow: '0 20px 60px rgba(0,0,0,0.2)',
+              animation: 'pop-in 0.25s var(--spring-bouncy) both',
             }}
+            onClick={e => e.stopPropagation()}
           >
-            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 'var(--space-5)' }}>
-              <Text variant="h3" style={{ fontWeight: 700 }}>What are you sharing?</Text>
+            {/* Modal header */}
+            <div
+              style={{
+                padding: 'var(--space-5) var(--space-5) var(--space-4)',
+                borderBottom: '1px solid rgba(17,17,17,0.05)',
+                display: 'flex',
+                justifyContent: 'space-between',
+                alignItems: 'center',
+              }}
+            >
+              <div>
+                <Text variant="body" style={{ fontWeight: 800, fontSize: '16px' }}>Settings</Text>
+                <span style={{ fontSize: '12px', color: 'var(--color-text-secondary)', fontWeight: 500 }}>
+                  @{profileUser.username}
+                </span>
+              </div>
               <button
-                onClick={() => setShowTypePicker(false)}
-                style={{ border: 'none', background: 'rgba(17,17,17,0.05)', width: '32px', height: '32px', borderRadius: '50%', display: 'flex', alignItems: 'center', justifyContent: 'center', cursor: 'pointer' }}
+                onClick={() => setShowSettingsDrawer(false)}
+                style={{
+                  border: 'none', background: 'rgba(17,17,17,0.06)',
+                  width: '30px', height: '30px', borderRadius: '50%',
+                  display: 'flex', alignItems: 'center', justifyContent: 'center',
+                  cursor: 'pointer', color: 'var(--color-text-primary)',
+                }}
               >
-                <X size={16} />
+                <X size={14} />
               </button>
             </div>
 
-            <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 'var(--space-3)' }}>
-              {([
-                { type: 'photo' as ActivityType, emoji: '📷', label: 'Photo' },
-                { type: 'project' as ActivityType, emoji: '🎨', label: 'Project' },
-                { type: 'article' as ActivityType, emoji: '📝', label: 'Article' },
-                { type: 'event' as ActivityType, emoji: '📅', label: 'Event' },
-                { type: 'opportunity' as ActivityType, emoji: '💼', label: 'Opportunity' },
-                { type: 'announcement' as ActivityType, emoji: '📍', label: 'Announcement' },
-              ]).map(({ type, emoji, label }) => (
+            {/* Menu items */}
+            <div style={{ padding: 'var(--space-2) 0' }}>
+              {[
+                { icon: '👤', label: 'Account Details', sublabel: 'Name, phone, bio', action: () => alert('Coming soon') },
+                { icon: '🔔', label: 'Notifications', sublabel: 'Manage alerts', action: () => alert('Coming soon') },
+                { icon: '🔒', label: 'Privacy', sublabel: 'Who can see your profile', action: () => alert('Coming soon') },
+              ].map((item, i) => (
                 <button
-                  key={type}
-                  onClick={() => {
-                    setSelectedActivityType(type);
-                    setShowTypePicker(false);
-                    setShowPublishDrawer(true);
-                  }}
+                  key={i}
+                  onClick={() => { item.action(); setShowSettingsDrawer(false); }}
                   style={{
-                    display: 'flex',
-                    alignItems: 'center',
-                    gap: 'var(--space-3)',
-                    padding: 'var(--space-4)',
-                    borderRadius: 'var(--radius-md)',
-                    border: '1px solid rgba(17,17,17,0.06)',
-                    backgroundColor: 'var(--color-bg-base)',
-                    cursor: 'pointer',
-                    transition: 'all 0.15s ease',
-                    fontFamily: 'var(--font-family)',
+                    width: '100%', display: 'flex', alignItems: 'center', gap: 'var(--space-3)',
+                    padding: 'var(--space-3) var(--space-5)',
+                    border: 'none', background: 'transparent', cursor: 'pointer',
+                    textAlign: 'left', fontFamily: 'var(--font-family)',
+                    transition: 'background 0.1s ease',
                   }}
-                  onPointerDown={e => (e.currentTarget.style.transform = 'scale(0.97)')}
-                  onPointerUp={e => (e.currentTarget.style.transform = 'scale(1)')}
+                  onPointerEnter={e => (e.currentTarget.style.background = 'rgba(17,17,17,0.03)')}
+                  onPointerLeave={e => (e.currentTarget.style.background = 'transparent')}
                 >
-                  <span style={{ fontSize: '22px' }}>{emoji}</span>
-                  <Text variant="body" style={{ fontWeight: 600, fontSize: '14px' }}>{label}</Text>
+                  <span style={{ fontSize: '20px', flexShrink: 0 }}>{item.icon}</span>
+                  <div>
+                    <div style={{ fontSize: '14px', fontWeight: 600, color: 'var(--color-text-primary)' }}>{item.label}</div>
+                    <div style={{ fontSize: '11px', color: 'var(--color-text-secondary)', fontWeight: 500 }}>{item.sublabel}</div>
+                  </div>
                 </button>
               ))}
             </div>
+
+            {/* Logout — separated with a divider */}
+            <div style={{ borderTop: '1px solid rgba(17,17,17,0.05)', padding: 'var(--space-2) 0 var(--space-2)' }}>
+              <button
+                onClick={handleLogout}
+                style={{
+                  width: '100%', display: 'flex', alignItems: 'center', gap: 'var(--space-3)',
+                  padding: 'var(--space-3) var(--space-5)',
+                  border: 'none', background: 'transparent', cursor: 'pointer',
+                  textAlign: 'left', fontFamily: 'var(--font-family)',
+                  transition: 'background 0.1s ease',
+                }}
+                onPointerEnter={e => (e.currentTarget.style.background = 'rgba(255,59,48,0.04)')}
+                onPointerLeave={e => (e.currentTarget.style.background = 'transparent')}
+              >
+                <LogOut size={18} color="var(--color-error)" style={{ flexShrink: 0 }} />
+                <div>
+                  <div style={{ fontSize: '14px', fontWeight: 600, color: 'var(--color-error)' }}>Log Out</div>
+                  <div style={{ fontSize: '11px', color: 'var(--color-text-secondary)', fontWeight: 500 }}>Sign out of your account</div>
+                </div>
+              </button>
+            </div>
           </div>
-        </div>
+        </div>,
+        document.body
       )}
 
-      {/* Create / Publish Drawer */}
-      {showPublishDrawer && (
 
-        <div 
+
+      {selectedProfilePost && createPortal(
+        <div
           style={{
             position: 'fixed',
             top: 0, left: 0, right: 0, bottom: 0,
-            backgroundColor: 'rgba(0,0,0,0.3)',
-            backdropFilter: 'blur(4px)',
+            backgroundColor: 'rgba(0,0,0,0.5)',
+            backdropFilter: 'blur(8px)',
+            WebkitBackdropFilter: 'blur(8px)',
             zIndex: 9999,
             display: 'flex',
-            alignItems: 'flex-end',
+            alignItems: 'center',
             justifyContent: 'center',
-            animation: 'pageFadeIn 0.2s ease'
+            padding: 'var(--space-5)',
+            animation: 'pageFadeIn 0.2s ease',
           }}
+          onClick={() => setSelectedProfilePost(null)}
         >
-          <div style={{ position: 'absolute', top: 0, left: 0, right: 0, bottom: 0 }} onClick={() => setShowPublishDrawer(false)} />
-          
-          <form 
-            onSubmit={handlePublish}
+          <div
             style={{
-              position: 'relative',
               width: '100%',
-              maxWidth: '480px',
+              maxWidth: '400px',
               backgroundColor: 'var(--color-bg-surface)',
-              borderRadius: 'var(--radius-lg) var(--radius-lg) 0 0',
-              padding: 'var(--space-6) var(--space-5) calc(var(--space-8) + 12px) var(--space-5)',
+              borderRadius: '28px',
+              border: '1px solid rgba(255,255,255,0.6)',
+              padding: 'var(--space-5)',
               display: 'flex',
               flexDirection: 'column',
               gap: 'var(--space-4)',
-              boxShadow: '0 -8px 32px rgba(0, 0, 0, 0.1)',
-              zIndex: 10000,
-              maxHeight: '90vh',
-              overflowY: 'auto'
+              boxShadow: '0 24px 48px -12px rgba(0,0,0,0.15)',
+              animation: 'pop-in 0.25s var(--spring-bouncy) both',
             }}
+            onClick={e => e.stopPropagation()}
           >
-            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 'var(--space-2)' }}>
-              <Text variant="h3" style={{ fontWeight: 700 }}>Share {selectedActivityType === 'photo' ? 'a Photo' : selectedActivityType === 'project' ? 'a Project' : selectedActivityType === 'event' ? 'an Event' : selectedActivityType === 'announcement' ? 'an Announcement' : selectedActivityType === 'opportunity' ? 'an Opportunity' : selectedActivityType === 'article' ? 'an Article' : 'Work'}</Text>
-              <button 
-                type="button"
-                onClick={() => setShowPublishDrawer(false)}
+            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+              <span style={{ fontSize: '12px', color: 'var(--color-text-secondary)', fontWeight: 700, textTransform: 'uppercase' }}>
+                Post Detail
+              </span>
+              <button
+                onClick={() => setSelectedProfilePost(null)}
                 style={{
-                  border: 'none',
-                  background: 'rgba(17, 17, 17, 0.05)',
-                  width: '32px',
-                  height: '32px',
-                  borderRadius: '50%',
-                  display: 'flex',
-                  alignItems: 'center',
-                  justifyContent: 'center',
-                  cursor: 'pointer',
-                  color: 'var(--color-text-primary)'
+                  border: 'none', background: 'rgba(17,17,17,0.06)',
+                  width: '28px', height: '28px', borderRadius: '50%',
+                  display: 'flex', alignItems: 'center', justifyContent: 'center',
+                  cursor: 'pointer', color: 'var(--color-text-primary)',
                 }}
               >
-                <X size={16} />
+                <X size={14} />
               </button>
             </div>
 
-            {/* Viewfinder Camera Area */}
-            <div 
-              style={{ 
-                width: '100%', 
-                aspectRatio: '4/3', 
-                backgroundColor: '#111111', 
-                position: 'relative',
-                display: 'flex', 
-                alignItems: 'center', 
-                justifyContent: 'center',
-                overflow: 'hidden',
-                borderRadius: 'var(--radius-md)',
-                marginTop: 'var(--space-2)'
-              }}
-            >
-              {selectedImg ? (
-                <img 
-                  src={selectedImg} 
-                  alt="portfolio preview" 
-                  style={{ width: '100%', height: '100%', objectFit: 'cover' }} 
-                />
-              ) : (
-                <>
-                  {/* Viewfinder borders */}
-                  <div style={{ position: 'absolute', top: 16, left: 16, width: 16, height: 16, borderTop: '2px solid rgba(255,255,255,0.4)', borderLeft: '2px solid rgba(255,255,255,0.4)' }} />
-                  <div style={{ position: 'absolute', top: 16, right: 16, width: 16, height: 16, borderTop: '2px solid rgba(255,255,255,0.4)', borderRight: '2px solid rgba(255,255,255,0.4)' }} />
-                  <div style={{ position: 'absolute', bottom: 16, left: 16, width: 16, height: 16, borderBottom: '2px solid rgba(255,255,255,0.4)', borderLeft: '2px solid rgba(255,255,255,0.4)' }} />
-                  <div style={{ position: 'absolute', bottom: 16, right: 16, width: 16, height: 16, borderBottom: '2px solid rgba(255,255,255,0.4)', borderRight: '2px solid rgba(255,255,255,0.4)' }} />
-
-                  {/* Focal point */}
-                  <div style={{ width: '40px', height: '40px', borderRadius: '50%', border: '1px dashed rgba(255,255,255,0.2)', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
-                    <div style={{ width: '4px', height: '4px', borderRadius: '50%', backgroundColor: 'rgba(255,255,255,0.3)' }} />
-                  </div>
-
-                  {/* Camera capture shutter button */}
-                  <label 
-                    style={{ 
-                      display: 'flex',
-                      flexDirection: 'column',
-                      alignItems: 'center',
-                      cursor: 'pointer',
-                      position: 'absolute',
-                      bottom: '20px',
-                      zIndex: 10
-                    }}
-                  >
-                    <div 
-                      style={{
-                        width: '56px',
-                        height: '56px',
-                        borderRadius: '50%',
-                        border: '3px solid #FFFFFF',
-                        padding: '3px',
-                        display: 'flex',
-                        alignItems: 'center',
-                        justifyContent: 'center'
-                      }}
-                    >
-                      <div style={{ width: '100%', height: '100%', borderRadius: '50%', backgroundColor: '#FFFFFF', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
-                        <Camera size={18} color="#111111" />
-                      </div>
-                    </div>
-                    <input 
-                      type="file" 
-                      accept="image/*" 
-                      onChange={handleImageSelect}
-                      style={{ display: 'none' }} 
-                    />
-                  </label>
-
-                  {isUploading && (
-                    <div style={{ position: 'absolute', bottom: '80px' }}>
-                      <span style={{ color: '#FFFFFF', fontSize: '11px', fontWeight: 600 }}>Uploading image...</span>
-                    </div>
-                  )}
-                </>
-              )}
-            </div>
-
-            <div>
-              <Text variant="metadata" style={{ color: 'var(--color-text-secondary)', marginBottom: '4px', fontWeight: 600 }}>Work Title / Description</Text>
-              <textarea 
-                placeholder="Describe your design, art, or contribution..."
-                value={caption}
-                onChange={e => setCaption(e.target.value)}
-                required
-                rows={2}
-                style={{
-                  width: '100%',
-                  padding: 'var(--space-2) 0',
-                  border: 'none',
-                  borderBottom: '1px solid var(--color-border-light)',
-                  outline: 'none',
-                  fontSize: 'var(--text-base)',
-                  fontFamily: 'var(--font-family)',
-                  background: 'transparent',
-                  color: 'var(--color-text-primary)',
-                  resize: 'none'
-                }}
-              />
-            </div>
-
-            <div>
-              <Text variant="metadata" style={{ color: 'var(--color-text-secondary)', marginBottom: '4px', fontWeight: 600 }}>Hashtags</Text>
-              <input 
-                type="text"
-                placeholder="e.g. #Ahimsa #Design"
-                value={tagsStr}
-                onChange={e => setTagsStr(e.target.value)}
-                style={{
-                  width: '100%',
-                  padding: 'var(--space-3) 0',
-                  border: 'none',
-                  borderBottom: '1px solid var(--color-border-light)',
-                  outline: 'none',
-                  fontSize: 'var(--text-base)',
-                  fontFamily: 'var(--font-family)',
-                  background: 'transparent',
-                  color: 'var(--color-text-primary)'
-                }}
-              />
-            </div>
-
-            {/* Upload progress bar — shown during active upload */}
-            {uploadProgress && uploadProgress.stage !== 'done' && (
-              <div style={{ display: 'flex', flexDirection: 'column', gap: '6px' }}>
-                <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
-                  <span style={{ fontSize: '11px', fontWeight: 700, color: 'var(--color-text-secondary)', textTransform: 'uppercase', letterSpacing: '0.5px' }}>
-                    {uploadProgress.stage === 'compressing' ? 'Compressing...' : 'Uploading...'}
-                  </span>
-                  <span style={{ fontSize: '11px', fontWeight: 700, color: 'var(--color-accent-gold)' }}>
-                    {uploadProgress.progress}%
-                  </span>
-                </div>
-                <div className="upload-progress-track">
-                  <div
-                    className="upload-progress-fill"
-                    style={{ width: `${uploadProgress.progress}%` }}
-                  />
-                </div>
+            {selectedProfilePost.mediaUrls?.[0] && (
+              <div style={{ borderRadius: '16px', overflow: 'hidden', width: '100%', aspectRatio: '4/3' }}>
+                <img src={selectedProfilePost.mediaUrls[0]} alt="Post" style={{ width: '100%', height: '100%', objectFit: 'cover' }} />
               </div>
             )}
 
-            <Button
-              type="submit"
-              variant="primary"
-              fullWidth
-              disabled={!selectedImg || isUploading}
-              style={{ height: '48px', borderRadius: 'var(--radius-sm)', marginTop: 'var(--space-2)' }}
-            >
-              {isUploading ? 'Publishing...' : 'Publish'}
-            </Button>
-          </form>
-        </div>
+            <div style={{ padding: '4px 0' }}>
+              <div style={{ whiteSpace: 'pre-wrap', fontSize: '15px', lineHeight: 1.5, color: 'var(--color-text-primary)' }}>
+                {(() => {
+                  try {
+                    const data = JSON.parse(selectedProfilePost.caption || '');
+                    return `💼 ${data.title}\n📍 ${data.location}\n💰 ${data.compensation}\n\n${data.description}`;
+                  } catch {
+                    return selectedProfilePost.caption;
+                  }
+                })()}
+              </div>
+              {selectedProfilePost.hashtags?.length > 0 && (
+                <div style={{ display: 'flex', flexWrap: 'wrap', gap: '6px', marginTop: '12px' }}>
+                  {selectedProfilePost.hashtags.map((tag: string, i: number) => (
+                    <span key={i} style={{ padding: '2px 8px', backgroundColor: 'rgba(212,175,55,0.1)', borderRadius: '8px', fontSize: '11px', color: 'var(--color-accent-gold)', fontWeight: 700 }}>{tag}</span>
+                  ))}
+                </div>
+              )}
+            </div>
+
+            {currentUser && currentUser.uid === selectedProfilePost.authorId && (
+              <Button
+                variant="secondary"
+                style={{
+                  height: '42px',
+                  borderRadius: 'var(--radius-sm)',
+                  borderColor: 'var(--color-error)',
+                  color: 'var(--color-error)',
+                  marginTop: 'var(--space-2)'
+                }}
+                onClick={async () => {
+                  if (confirm('Are you sure you want to delete this post?')) {
+                    await deletePost(selectedProfilePost.postId);
+                    setSelectedProfilePost(null);
+                    await loadProfile(targetId, currentUserId);
+                  }
+                }}
+              >
+                Delete Post
+              </Button>
+            )}
+          </div>
+        </div>,
+        document.body
       )}
 
     </div>

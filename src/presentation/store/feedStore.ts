@@ -8,6 +8,16 @@ const WALL_CAPACITY = 300;
 const PAGE_SIZE = 10;
 const CACHE_KEY = 'atlas_feed_cache';
 
+const parseActivityType = (postId: string): ActivityType => {
+  if (postId.includes('_opportunity_') || postId.startsWith('opp_')) return 'opportunity';
+  if (postId.includes('_project_')) return 'project';
+  if (postId.includes('_event_')) return 'event';
+  if (postId.includes('_announcement_')) return 'announcement';
+  if (postId.includes('_article_')) return 'article';
+  if (postId.includes('_achievement_')) return 'achievement';
+  return 'photo';
+};
+
 const calculateEngagementScore = async (post: ActivityModel): Promise<number> => {
   const ageInMs = Date.now() - new Date(post.timestamp).getTime();
   const ageInHours = Math.max(0, ageInMs / (1000 * 60 * 60));
@@ -34,7 +44,7 @@ interface FeedState {
     authorId: string,
     authorName: string,
     authorPhoto: string | undefined,
-    file: File,
+    file: File | null,
     caption: string,
     hashtags: string[],
     activityType: ActivityType,
@@ -42,6 +52,7 @@ interface FeedState {
 
   isLiked: (postId: string) => boolean;
   isSaved: (postId: string) => boolean;
+  deletePost: (postId: string) => Promise<void>;
 }
 
 export const useFeedStore = create<FeedState>((set, get) => ({
@@ -78,7 +89,11 @@ export const useFeedStore = create<FeedState>((set, get) => ({
 
       if (error) throw error;
 
-      const activities = (data as ActivityModel[]);
+      const rawActivities = (data as ActivityModel[]);
+      const activities = rawActivities.map(act => ({
+        ...act,
+        activityType: parseActivityType(act.postId)
+      }));
 
       let userLikes: string[] = [];
       let userSaves: string[] = [];
@@ -92,8 +107,12 @@ export const useFeedStore = create<FeedState>((set, get) => ({
       // Cache the fresh feed
       try { sessionStorage.setItem(CACHE_KEY, JSON.stringify(activities)); } catch { /* ignore */ }
 
+      // Preserve pending posts during reload
+      const currentPending = get().activities.filter(a => a.status === 'pending');
+      const mergedActivities = [...currentPending, ...activities];
+
       set({
-        activities,
+        activities: mergedActivities,
         userLikes,
         userSaves,
         isLoading: false,
@@ -121,7 +140,11 @@ export const useFeedStore = create<FeedState>((set, get) => ({
 
       if (error) throw error;
 
-      const newActivities = data as ActivityModel[];
+      const rawNewActivities = data as ActivityModel[];
+      const newActivities = rawNewActivities.map(act => ({
+        ...act,
+        activityType: parseActivityType(act.postId)
+      }));
       const combined = [...activities, ...newActivities];
 
       try { sessionStorage.setItem(CACHE_KEY, JSON.stringify(combined.filter(a => a.status === 'live'))); } catch { /* ignore */ }
@@ -184,7 +207,7 @@ export const useFeedStore = create<FeedState>((set, get) => ({
     activityType,
   ) => {
     const tempId = 'pending_' + Date.now();
-    const localUrl = URL.createObjectURL(file);
+    const localUrl = file ? URL.createObjectURL(file) : '';
 
     // ── 1. Optimistic insert ─────────────────────────────────────────
     const pending: ActivityModel = {
@@ -192,7 +215,7 @@ export const useFeedStore = create<FeedState>((set, get) => ({
       authorId,
       authorName,
       authorPhoto,
-      mediaUrls: [localUrl],
+      mediaUrls: localUrl ? [localUrl] : [],
       caption,
       hashtags,
       activityType,
@@ -206,18 +229,20 @@ export const useFeedStore = create<FeedState>((set, get) => ({
 
     // ── 2. Compress + upload with progress ───────────────────────────
     let finalUrl = localUrl;
-    try {
-      finalUrl = await uploadToCloudinary(file, (progress) => {
-        set({ uploadProgress: progress });
-      });
-    } catch (err) {
-      console.error('Upload failed, rolling back optimistic post:', err);
-      set(state => ({
-        activities: state.activities.filter(a => a.postId !== tempId),
-        error: 'Upload failed. Please try again.',
-        uploadProgress: null,
-      }));
-      return;
+    if (file) {
+      try {
+        finalUrl = await uploadToCloudinary(file, (progress) => {
+          set({ uploadProgress: progress });
+        });
+      } catch (err) {
+        console.error('Upload failed, rolling back optimistic post:', err);
+        set(state => ({
+          activities: state.activities.filter(a => a.postId !== tempId),
+          error: 'Upload failed. Please try again.',
+          uploadProgress: null,
+        }));
+        return;
+      }
     }
 
     set({ uploadProgress: null });
@@ -238,8 +263,8 @@ export const useFeedStore = create<FeedState>((set, get) => ({
     // ── 4. Persist confirmed activity ────────────────────────────────
     const confirmed: ActivityModel = {
       ...pending,
-      postId: 'post_' + Date.now(),
-      mediaUrls: [finalUrl],
+      postId: `post_${activityType}_${Date.now()}`,
+      mediaUrls: finalUrl ? [finalUrl] : [],
       status: 'live',
     };
     await StorageService.savePost(confirmed);
@@ -258,4 +283,16 @@ export const useFeedStore = create<FeedState>((set, get) => ({
 
   isLiked: (postId) => get().userLikes.includes(postId),
   isSaved: (postId) => get().userSaves.includes(postId),
+
+  deletePost: async (postId) => {
+    set(state => ({
+      activities: state.activities.filter(a => a.postId !== postId)
+    }));
+    await StorageService.deletePost(postId);
+    // Update cache
+    try {
+      const live = get().activities.filter(a => a.status !== 'archived');
+      sessionStorage.setItem(CACHE_KEY, JSON.stringify(live));
+    } catch { /* ignore */ }
+  },
 }));

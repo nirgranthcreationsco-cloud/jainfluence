@@ -1,8 +1,10 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import { Search, MapPin, DollarSign, Plus, X, MessageCircle } from 'lucide-react';
 import { Text } from '../components/ui/Text';
 import { Surface } from '../components/ui/Surface';
 import { Button } from '../components/ui/Button';
+import { useAuthStore } from '../store/authStore';
+import { useFeedStore } from '../store/feedStore';
 
 interface Opportunity {
   id: string;
@@ -68,7 +70,8 @@ const INITIAL_OPPORTUNITIES: Opportunity[] = [
 ];
 
 export const OpportunitiesScreen: React.FC = () => {
-  const [opportunities, setOpportunities] = useState<Opportunity[]>(INITIAL_OPPORTUNITIES);
+  const { user } = useAuthStore();
+  const { activities, loadFeed, createActivity } = useFeedStore();
   const [selectedFilter, setSelectedFilter] = useState<'All' | 'hiring' | 'work-wanted'>('All');
   const [searchQuery, setSearchQuery] = useState('');
   const [showPostDrawer, setShowPostDrawer] = useState(false);
@@ -82,28 +85,84 @@ export const OpportunitiesScreen: React.FC = () => {
   const [description, setDescription] = useState('');
   const [tagsStr, setTagsStr] = useState('');
 
-  const handlePostSubmit = (e: React.FormEvent) => {
+  // Fetch opportunities from Supabase on mount
+  useEffect(() => {
+    loadFeed(user?.uid);
+  }, [loadFeed, user?.uid]);
+
+  const parseOppFromActivity = (activity: any): Opportunity => {
+    try {
+      const data = JSON.parse(activity.caption || '');
+      return {
+        id: activity.postId,
+        title: data.title || activity.caption || 'Opportunity',
+        type: data.type || 'hiring',
+        role: data.role || 'Contributor',
+        compensation: data.compensation || 'Budget TBD',
+        postedBy: {
+          name: activity.authorName,
+          photo: activity.authorPhoto || `https://ui-avatars.com/api/?name=${encodeURIComponent(activity.authorName)}&background=D4AF37&color=fff&size=64`,
+        },
+        location: data.location || 'Remote',
+        description: data.description || activity.caption || '',
+        tags: activity.hashtags || []
+      };
+    } catch {
+      return {
+        id: activity.postId,
+        title: activity.caption || 'Opportunity',
+        type: 'hiring',
+        role: 'Contributor',
+        compensation: 'Budget TBD',
+        postedBy: {
+          name: activity.authorName,
+          photo: activity.authorPhoto || `https://ui-avatars.com/api/?name=${encodeURIComponent(activity.authorName)}&background=D4AF37&color=fff&size=64`,
+        },
+        location: 'Remote',
+        description: activity.caption || '',
+        tags: activity.hashtags || []
+      };
+    }
+  };
+
+  const dbOpps = activities
+    .filter(act => act.activityType === 'opportunity' || act.postId.includes('_opportunity_'))
+    .map(parseOppFromActivity);
+
+  const opportunities = [...dbOpps, ...INITIAL_OPPORTUNITIES];
+
+  const handlePostSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     if (!title || !role || !location || !description) {
       alert('Please fill out the required fields.');
       return;
     }
-    const tags = tagsStr.split(',').map(t => t.trim()).filter(Boolean);
-    const newOpp: Opportunity = {
-      id: 'opp_' + Date.now(),
+    if (!user) {
+      alert('You must be logged in to post an opportunity.');
+      return;
+    }
+
+    const tags = tagsStr.split(',').map(t => t.trim()).filter(Boolean).map(t => t.startsWith('#') ? t : `#${t}`);
+    
+    const oppData = {
       title,
       type,
       role,
       compensation: compensation || (type === 'hiring' ? 'Budget TBD' : 'Available'),
-      postedBy: {
-        name: 'You',
-        photo: 'https://images.unsplash.com/photo-1500648767791-00dcc994a43e?q=80&w=200&auto=format&fit=crop'
-      },
       location,
-      description,
-      tags
+      description
     };
-    setOpportunities([newOpp, ...opportunities]);
+
+    await createActivity(
+      user.uid,
+      user.name,
+      user.profilePhoto || '',
+      null,
+      JSON.stringify(oppData),
+      tags,
+      'opportunity'
+    );
+
     setShowPostDrawer(false);
     // Reset form fields
     setTitle('');

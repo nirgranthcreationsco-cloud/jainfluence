@@ -40,7 +40,7 @@ export const OnboardingScreen: React.FC = () => {
       >
         <img
           src="https://images.unsplash.com/photo-1507608869274-d3177c8bb4c7?q=80&w=1080&auto=format&fit=crop"
-          alt="Atlas Community"
+          alt="Jainfluence Community"
           style={{
             width: '100%',
             height: '100%',

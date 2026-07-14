@@ -1,17 +1,5 @@
-/**
- * Cloudinary Upload Service
- *
- * Compresses the image first, then uploads via XMLHttpRequest so we
- * can fire real upload-progress events back to the caller.
- *
- * Falls back to a local blob URL when credentials are not configured
- * (development / CI environments).
- */
-
+import { supabaseAdmin } from './supabaseClient';
 import { compressImage } from './imageCompressor';
-
-const CLOUD_NAME = import.meta.env.VITE_CLOUDINARY_CLOUD_NAME as string;
-const UPLOAD_PRESET = import.meta.env.VITE_CLOUDINARY_UPLOAD_PRESET as string;
 
 export interface UploadStage {
   stage: 'compressing' | 'uploading' | 'done';
@@ -20,65 +8,53 @@ export interface UploadStage {
 }
 
 /**
- * @param file        The raw File from a file input.
- * @param onProgress  Optional callback fired throughout the pipeline.
- * @returns           The permanent Cloudinary secure_url (or a local blob URL as fallback).
+ * Uploads a photo or video file to Supabase storage.
+ * Images are compressed before upload. Videos are uploaded as-is.
  */
 export async function uploadToCloudinary(
   file: File,
   onProgress?: (state: UploadStage) => void,
 ): Promise<string> {
-  // ── Step 1: Compress ──────────────────────────────────────────────
-  onProgress?.({ stage: 'compressing', progress: 0 });
-  const compressed = await compressImage(file);
-  onProgress?.({ stage: 'compressing', progress: 100 });
+  const isVideo = file.type.startsWith('video/');
 
-  // ── Fallback: no credentials ──────────────────────────────────────
-  if (!CLOUD_NAME || !UPLOAD_PRESET) {
-    console.warn('[Cloudinary] Upload preset not configured — using local blob URL.');
-    onProgress?.({ stage: 'done', progress: 100 });
-    return URL.createObjectURL(compressed);
+  let uploadFile: Blob = file;
+
+  if (!isVideo) {
+    // ── Compress images ─────────────────────────────────────────────
+    onProgress?.({ stage: 'compressing', progress: 0 });
+    uploadFile = await compressImage(file);
+    onProgress?.({ stage: 'compressing', progress: 100 });
   }
 
-  // ── Step 2: Upload with progress ──────────────────────────────────
-  return new Promise<string>((resolve) => {
-    const formData = new FormData();
-    formData.append('file', compressed);
-    formData.append('upload_preset', UPLOAD_PRESET);
+  // ── Upload to Supabase Storage ───────────────────────────────────
+  onProgress?.({ stage: 'uploading', progress: 10 });
 
-    const xhr = new XMLHttpRequest();
-    xhr.open('POST', `https://api.cloudinary.com/v1_1/${CLOUD_NAME}/image/upload`);
+  const fileExt = file.name.split('.').pop() || (isVideo ? 'mp4' : 'jpg');
+  const folder = isVideo ? 'videos' : 'photos';
+  const fileName = `${folder}/${Date.now()}-${Math.random().toString(36).substr(2, 9)}.${fileExt}`;
 
-    xhr.upload.addEventListener('progress', (e) => {
-      if (e.lengthComputable) {
-        const pct = Math.round((e.loaded / e.total) * 100);
-        onProgress?.({ stage: 'uploading', progress: pct });
-      }
+  onProgress?.({ stage: 'uploading', progress: 40 });
+
+  const { error } = await supabaseAdmin.storage
+    .from('media')
+    .upload(fileName, uploadFile, {
+      cacheControl: '3600',
+      upsert: true,
+      contentType: file.type,
     });
 
-    xhr.addEventListener('load', () => {
-      try {
-        const data = JSON.parse(xhr.responseText);
-        if (data.secure_url) {
-          onProgress?.({ stage: 'done', progress: 100 });
-          resolve(data.secure_url as string);
-        } else {
-          throw new Error('No secure_url in response');
-        }
-      } catch (err) {
-        console.error('[Cloudinary] Parse error, using blob fallback:', err);
-        onProgress?.({ stage: 'done', progress: 100 });
-        resolve(URL.createObjectURL(compressed));
-      }
-    });
+  if (error) {
+    console.error('[Supabase Storage] Upload error, using local fallback:', error);
+    onProgress?.({ stage: 'done', progress: 100 });
+    return URL.createObjectURL(uploadFile);
+  }
 
-    xhr.addEventListener('error', () => {
-      console.error('[Cloudinary] Network error, using blob fallback');
-      onProgress?.({ stage: 'done', progress: 100 });
-      resolve(URL.createObjectURL(compressed));
-    });
+  onProgress?.({ stage: 'uploading', progress: 90 });
 
-    onProgress?.({ stage: 'uploading', progress: 0 });
-    xhr.send(formData);
-  });
+  const { data: publicUrlData } = supabaseAdmin.storage
+    .from('media')
+    .getPublicUrl(fileName);
+
+  onProgress?.({ stage: 'done', progress: 100 });
+  return publicUrlData.publicUrl;
 }
