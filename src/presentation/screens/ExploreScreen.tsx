@@ -26,12 +26,7 @@ const FEATURED_CREATOR = {
   authorId: 'user_siddharth'
 };
 
-const COMMUNITY_PULSE = {
-  creatorsJoined: 28,
-  opportunities: 14,
-  events: 6,
-  appreciations: 127
-};
+
 
 const ACTIVITY_LABELS: Record<string, string> = {
   photo: '📷 Photo',
@@ -47,7 +42,7 @@ const ACTIVITY_LABELS: Record<string, string> = {
 export const ExploreScreen: React.FC = () => {
   const navigate = useNavigate();
   const { user } = useAuthStore();
-  const { activities, isLoading, isFetchingMore, hasMore, loadFeed, loadMore, likePost, isLiked } = useFeedStore();
+  const { activities, isLoading, isFetchingMore, hasMore, loadFeed, loadMore, likePost, isLiked, fetchCommunityPulse, communityPulse } = useFeedStore();
   const sentinelRef = useRef<HTMLDivElement>(null);
 
   const longPressTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
@@ -57,7 +52,8 @@ export const ExploreScreen: React.FC = () => {
 
   useEffect(() => {
     loadFeed(user?.uid);
-  }, [user?.uid, loadFeed]);
+    fetchCommunityPulse();
+  }, [user?.uid, loadFeed, fetchCommunityPulse]);
 
   // Infinite scroll via IntersectionObserver
   useEffect(() => {
@@ -155,7 +151,9 @@ export const ExploreScreen: React.FC = () => {
     </div>
   );
 
-  const renderCommunityPulse = () => (
+  const renderCommunityPulse = () => {
+    const pulse = communityPulse;
+    return (
     <div style={{ padding: '0 var(--space-5) var(--space-5)' }}>
       <div
         style={{
@@ -166,22 +164,28 @@ export const ExploreScreen: React.FC = () => {
         }}
       >
         <div style={{ textAlign: 'center' }}>
-          <div style={{ fontSize: '16px', fontWeight: 800, color: 'var(--color-text-primary)' }}>{COMMUNITY_PULSE.creatorsJoined}</div>
-          <div style={{ fontSize: '9px', fontWeight: 700, color: 'var(--color-text-secondary)', textTransform: 'uppercase', marginTop: '2px' }}>Joined</div>
+          <div style={{ fontSize: '16px', fontWeight: 800, color: 'var(--color-text-primary)' }}>{pulse?.members ?? '—'}</div>
+          <div style={{ fontSize: '9px', fontWeight: 700, color: 'var(--color-text-secondary)', textTransform: 'uppercase', marginTop: '2px' }}>Members</div>
         </div>
         <div style={{ width: '1px', height: '24px', backgroundColor: 'rgba(17,17,17,0.08)' }} />
         <div style={{ textAlign: 'center' }}>
-          <div style={{ fontSize: '16px', fontWeight: 800, color: 'var(--color-text-primary)' }}>{COMMUNITY_PULSE.opportunities}</div>
+          <div style={{ fontSize: '16px', fontWeight: 800, color: 'var(--color-text-primary)' }}>{pulse?.posts ?? '—'}</div>
+          <div style={{ fontSize: '9px', fontWeight: 700, color: 'var(--color-text-secondary)', textTransform: 'uppercase', marginTop: '2px' }}>Posts</div>
+        </div>
+        <div style={{ width: '1px', height: '24px', backgroundColor: 'rgba(17,17,17,0.08)' }} />
+        <div style={{ textAlign: 'center' }}>
+          <div style={{ fontSize: '16px', fontWeight: 800, color: 'var(--color-text-primary)' }}>{pulse?.gigs ?? '—'}</div>
           <div style={{ fontSize: '9px', fontWeight: 700, color: 'var(--color-text-secondary)', textTransform: 'uppercase', marginTop: '2px' }}>Gigs</div>
         </div>
         <div style={{ width: '1px', height: '24px', backgroundColor: 'rgba(17,17,17,0.08)' }} />
         <div style={{ textAlign: 'center' }}>
-          <div style={{ fontSize: '16px', fontWeight: 800, color: 'var(--color-text-primary)' }}>{COMMUNITY_PULSE.appreciations}</div>
+          <div style={{ fontSize: '16px', fontWeight: 800, color: 'var(--color-text-primary)' }}>{pulse?.appreciations ?? '—'}</div>
           <div style={{ fontSize: '9px', fontWeight: 700, color: 'var(--color-text-secondary)', textTransform: 'uppercase', marginTop: '2px' }}>Appreciations</div>
         </div>
       </div>
     </div>
   );
+  };
 
   return (
     <div className="page-fade-in" style={{ paddingBottom: '120px', minHeight: '100vh', backgroundColor: 'var(--color-bg-base)' }}>

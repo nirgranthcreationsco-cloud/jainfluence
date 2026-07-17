@@ -8,14 +8,18 @@ const WALL_CAPACITY = 300;
 const PAGE_SIZE = 10;
 const CACHE_KEY = 'atlas_feed_cache';
 
-const parseActivityType = (postId: string): ActivityType => {
-  if (postId.includes('_opportunity_') || postId.startsWith('opp_')) return 'opportunity';
-  if (postId.includes('_project_')) return 'project';
-  if (postId.includes('_event_')) return 'event';
-  if (postId.includes('_announcement_')) return 'announcement';
-  if (postId.includes('_article_')) return 'article';
-  if (postId.includes('_achievement_')) return 'achievement';
-  return 'photo';
+const parseActivityType = (act: ActivityModel): ActivityType => {
+  // Prefer DB value if present, fall back to postId parsing for legacy posts
+  if (act.activityType && act.activityType !== 'photo') return act.activityType;
+  const id = act.postId;
+  if (id.includes('_opportunity_') || id.startsWith('opp_')) return 'opportunity';
+  if (id.includes('_project_')) return 'project';
+  if (id.includes('_event_')) return 'event';
+  if (id.includes('_announcement_')) return 'announcement';
+  if (id.includes('_article_')) return 'article';
+  if (id.includes('_achievement_')) return 'achievement';
+  if (id.includes('_video_')) return 'video';
+  return act.activityType || 'photo';
 };
 
 const calculateEngagementScore = async (post: ActivityModel): Promise<number> => {
@@ -26,6 +30,13 @@ const calculateEngagementScore = async (post: ActivityModel): Promise<number> =>
   return (likes * 1 + savesCount * 3) / Math.pow(1 + ageInHours / 48, 1.2);
 };
 
+interface CommunityPulse {
+  members: number;
+  posts: number;
+  gigs: number;
+  appreciations: number;
+}
+
 interface FeedState {
   activities: ActivityModel[];
   userLikes: string[];
@@ -35,11 +46,13 @@ interface FeedState {
   hasMore: boolean;
   error: string | null;
   uploadProgress: UploadStage | null;
+  communityPulse: CommunityPulse | null;
 
   loadFeed: (userId?: string) => Promise<void>;
   loadMore: (userId?: string) => Promise<void>;
   likePost: (userId: string, postId: string) => Promise<void>;
   savePostToggle: (userId: string, postId: string) => Promise<void>;
+  fetchCommunityPulse: () => Promise<void>;
   createActivity: (
     authorId: string,
     authorName: string,
@@ -64,6 +77,7 @@ export const useFeedStore = create<FeedState>((set, get) => ({
   hasMore: true,
   error: null,
   uploadProgress: null,
+  communityPulse: null,
 
   loadFeed: async (userId?: string) => {
     // ── Show cached feed instantly ────────────────────────────────────
@@ -92,7 +106,7 @@ export const useFeedStore = create<FeedState>((set, get) => ({
       const rawActivities = (data as ActivityModel[]);
       const activities = rawActivities.map(act => ({
         ...act,
-        activityType: parseActivityType(act.postId)
+        activityType: parseActivityType(act)
       }));
 
       let userLikes: string[] = [];
@@ -143,7 +157,7 @@ export const useFeedStore = create<FeedState>((set, get) => ({
       const rawNewActivities = data as ActivityModel[];
       const newActivities = rawNewActivities.map(act => ({
         ...act,
-        activityType: parseActivityType(act.postId)
+        activityType: parseActivityType(act)
       }));
       const combined = [...activities, ...newActivities];
 
@@ -195,6 +209,29 @@ export const useFeedStore = create<FeedState>((set, get) => ({
     set({ userSaves: newSaves });
 
     await StorageService.toggleSave(userId, postId);
+  },
+
+  fetchCommunityPulse: async () => {
+    try {
+      const [members, posts, gigs, appreciations] = await Promise.all([
+        supabase.from('users').select('*', { count: 'exact', head: true }),
+        supabase.from('posts').select('*', { count: 'exact', head: true }).eq('status', 'live'),
+        supabase.from('posts').select('*', { count: 'exact', head: true })
+          .eq('status', 'live')
+          .ilike('postId', '%_opportunity_%'),
+        supabase.from('likes').select('*', { count: 'exact', head: true }),
+      ]);
+      set({
+        communityPulse: {
+          members: members.count ?? 0,
+          posts: posts.count ?? 0,
+          gigs: gigs.count ?? 0,
+          appreciations: appreciations.count ?? 0,
+        }
+      });
+    } catch (e) {
+      console.error('Failed to fetch community pulse:', e);
+    }
   },
 
   createActivity: async (

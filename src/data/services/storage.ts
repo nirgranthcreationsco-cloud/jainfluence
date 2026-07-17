@@ -71,8 +71,7 @@ export class StorageService {
   }
 
   static async savePost(post: ActivityModel): Promise<void> {
-    const { activityType, ...dbPost } = post as any;
-    const { error } = await supabase.from('posts').upsert(dbPost);
+    const { error } = await supabase.from('posts').upsert(post);
     if (error) console.error('Error saving post:', error);
   }
 
@@ -82,8 +81,7 @@ export class StorageService {
   }
 
   static async saveAllPosts(posts: ActivityModel[]): Promise<void> {
-    const dbPosts = posts.map(({ activityType, ...dbPost }: any) => dbPost);
-    const { error } = await supabase.from('posts').upsert(dbPosts);
+    const { error } = await supabase.from('posts').upsert(posts);
     if (error) console.error('Error saving all posts:', error);
   }
 

@@ -22,13 +22,36 @@ export const CreatePostModal: React.FC<CreatePostModalProps> = ({ onClose, onSuc
   const [selectedMediaUrl, setSelectedMediaUrl] = useState<string | null>(null);
   const [mediaType, setMediaType] = useState<'image' | 'video' | null>(null);
   const [isPublishing, setIsPublishing] = useState(false);
+  const [mediaError, setMediaError] = useState<string | null>(null);
+  const MAX_VIDEO_DURATION = 90; // seconds
 
   const handleMediaSelect = (e: React.ChangeEvent<HTMLInputElement>) => {
     if (e.target.files && e.target.files[0]) {
       const file = e.target.files[0];
-      setSelectedFile(file);
-      setSelectedMediaUrl(URL.createObjectURL(file));
-      setMediaType(file.type.startsWith('video/') ? 'video' : 'image');
+      const isVideo = file.type.startsWith('video/');
+      setMediaError(null);
+
+      if (isVideo) {
+        // Validate duration before accepting
+        const tempUrl = URL.createObjectURL(file);
+        const vid = document.createElement('video');
+        vid.preload = 'metadata';
+        vid.onloadedmetadata = () => {
+          URL.revokeObjectURL(tempUrl);
+          if (vid.duration > MAX_VIDEO_DURATION) {
+            setMediaError(`Video must be ${MAX_VIDEO_DURATION} seconds or less (yours is ${Math.round(vid.duration)}s).`);
+            return;
+          }
+          setSelectedFile(file);
+          setSelectedMediaUrl(URL.createObjectURL(file));
+          setMediaType('video');
+        };
+        vid.src = tempUrl;
+      } else {
+        setSelectedFile(file);
+        setSelectedMediaUrl(URL.createObjectURL(file));
+        setMediaType('image');
+      }
     }
   };
 
@@ -36,6 +59,7 @@ export const CreatePostModal: React.FC<CreatePostModalProps> = ({ onClose, onSuc
     setSelectedFile(null);
     setSelectedMediaUrl(null);
     setMediaType(null);
+    setMediaError(null);
   };
 
   const handlePublish = async (e: React.FormEvent) => {
@@ -255,6 +279,20 @@ export const CreatePostModal: React.FC<CreatePostModalProps> = ({ onClose, onSuc
             </div>
           )}
         </div>
+
+        {/* Error message */}
+        {mediaError && (
+          <div style={{
+            backgroundColor: 'rgba(220,53,69,0.08)',
+            border: '1px solid rgba(220,53,69,0.25)',
+            borderRadius: '10px',
+            padding: '10px 14px',
+            display: 'flex', alignItems: 'flex-start', gap: '8px'
+          }}>
+            <span style={{ fontSize: '14px' }}>⚠️</span>
+            <span style={{ fontSize: '13px', fontWeight: 600, color: '#dc3545', lineHeight: 1.4 }}>{mediaError}</span>
+          </div>
+        )}
 
         {/* Media type chip */}
         {mediaType && (
