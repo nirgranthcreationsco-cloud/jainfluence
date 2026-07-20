@@ -156,3 +156,7 @@ body {
   animation: pop-in 0.35s var(--spring-bouncy) both;
 }
 
+@keyframes slideUp {
+  from { transform: translateY(100%); }
+  to { transform: translateY(0); }
+}

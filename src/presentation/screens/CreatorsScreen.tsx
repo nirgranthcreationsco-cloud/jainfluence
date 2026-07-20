@@ -1,241 +1,238 @@
 import React, { useState, useEffect } from 'react';
 import { useNavigate } from 'react-router-dom';
-import { Search, MapPin, Star, CheckCircle2 } from 'lucide-react';
+import { Search, MapPin, CheckCircle2 } from 'lucide-react';
 import { StorageService } from '../../data/services/storage';
-import type { UserModel } from '../../data/types';
-
+import type { UserModel, CreatorCategory } from '../../data/types';
+import { ALL_CREATOR_CATEGORIES } from '../../data/types';
 import { Text } from '../components/ui/Text';
-import { Surface } from '../components/ui/Surface';
-import { Button } from '../components/ui/Button';
+import { GuestAuthModal } from '../components/GuestAuthModal';
+import { useAuthStore } from '../store/authStore';
 
-const CATEGORIES = [
-  'All', 'Video Editors', 'Photographers', 'Developers',
-  'Speakers', 'Designers', 'Writers', 'Artists'
-];
+const CATEGORY_ICONS: Record<CreatorCategory, string> = {
+  'Photographer': '📷',
+  'Videographer': '🎬',
+  'Graphic Designer': '🎨',
+  'Website Developer': '💻',
+  'App Developer': '📱',
+  'Artist': '🖌️',
+};
+
+const CATEGORY_COLORS: Record<CreatorCategory, string> = {
+  'Photographer': '#7C3AED',
+  'Videographer': '#DC2626',
+  'Graphic Designer': '#D97706',
+  'Website Developer': '#2563EB',
+  'App Developer': '#059669',
+  'Artist': '#DB2777',
+};
+
+type CategoryFilter = 'All' | CreatorCategory;
 
 export const CreatorsScreen: React.FC = () => {
   const navigate = useNavigate();
+  const { user } = useAuthStore();
   const [creators, setCreators] = useState<UserModel[]>([]);
-  const [selectedCategory, setSelectedCategory] = useState('All');
+  const [selectedCategory, setSelectedCategory] = useState<CategoryFilter>('All');
   const [searchQuery, setSearchQuery] = useState('');
   const [isLoading, setIsLoading] = useState(true);
+  const [showGuestModal, setShowGuestModal] = useState(false);
 
   useEffect(() => {
     const fetchCreators = async () => {
       const users = await StorageService.getUsers();
-      setCreators(users);
+      // Show users who have Creator role OR any creator categories set
+      const creatorsOnly = users.filter(u =>
+        u.roles?.includes('Creator') || (u.creatorCategories && u.creatorCategories.length > 0)
+      );
+      setCreators(creatorsOnly.length > 0 ? creatorsOnly : users); // fallback: show all if none tagged yet
       setIsLoading(false);
     };
     fetchCreators();
   }, []);
 
   const filteredCreators = creators.filter(c => {
-    // Standard mock tags or skills check
-    const matchesCategory = selectedCategory === 'All' || 
-      (c.skills && c.skills.some(s => s.toLowerCase().includes(selectedCategory.toLowerCase().slice(0, -1)))) ||
-      (selectedCategory === 'Video Editors' && c.skills && c.skills.some(s => s.toLowerCase().includes('video') || s.toLowerCase().includes('editor')));
-    
-    const matchesSearch = c.name.toLowerCase().includes(searchQuery.toLowerCase()) || 
-                          c.bio.toLowerCase().includes(searchQuery.toLowerCase()) ||
-                          (c.skills && c.skills.some(s => s.toLowerCase().includes(searchQuery.toLowerCase())));
+    const matchesCategory = selectedCategory === 'All' ||
+      (c.creatorCategories && c.creatorCategories.includes(selectedCategory as CreatorCategory)) ||
+      // Legacy fallback: skills matching
+      (c.skills && c.skills.some(s => s.toLowerCase().includes((selectedCategory as string).toLowerCase().split(' ')[0].toLowerCase())));
+
+    const matchesSearch = !searchQuery ||
+      c.name.toLowerCase().includes(searchQuery.toLowerCase()) ||
+      (c.bio && c.bio.toLowerCase().includes(searchQuery.toLowerCase())) ||
+      (c.city && c.city.toLowerCase().includes(searchQuery.toLowerCase())) ||
+      (c.creatorCategories && c.creatorCategories.some(cat => cat.toLowerCase().includes(searchQuery.toLowerCase())));
+
     return matchesCategory && matchesSearch;
   });
 
+  const requireAuth = (action: () => void) => {
+    if (!user) { setShowGuestModal(true); return; }
+    action();
+  };
+
   return (
     <div className="page-fade-in" style={{ paddingBottom: '100px', minHeight: '100vh', backgroundColor: 'var(--color-bg-base)' }}>
-      
-      {/* Search & Header Section */}
-      <div style={{ padding: 'var(--space-5) var(--space-5) var(--space-3) var(--space-5)' }}>
-        <Text variant="hero" style={{ fontWeight: 800 }}>
-          Find Talent
+      {showGuestModal && <GuestAuthModal onClose={() => setShowGuestModal(false)} />}
+
+      {/* Header */}
+      <div style={{ padding: '24px 20px 16px' }}>
+        <Text variant="hero" style={{ fontWeight: 800 }}>Find Talent</Text>
+        <Text variant="body" style={{ color: '#737373', marginTop: '4px', fontSize: '14px' }}>
+          Discover Jain creators and professionals
         </Text>
-        
-        {/* Editorial Search Bar */}
-        <div
-          style={{
-            display: 'flex',
-            alignItems: 'center',
-            gap: 'var(--space-3)',
-            marginTop: 'var(--space-4)',
-            padding: 'var(--space-2) var(--space-3)',
-            backgroundColor: 'rgba(17, 17, 17, 0.03)',
-            borderRadius: 'var(--radius-sm)',
-            border: '1px solid rgba(17, 17, 17, 0.01)',
-          }}
-        >
-          <Search size={18} color="var(--color-text-secondary)" />
+
+        {/* Search Bar */}
+        <div style={{ display: 'flex', alignItems: 'center', gap: '12px', marginTop: '16px', padding: '12px 16px', backgroundColor: '#FFFFFF', borderRadius: '16px', boxShadow: '0 2px 8px rgba(0,0,0,0.04)', border: '1px solid rgba(17,17,17,0.05)' }}>
+          <Search size={18} color="#A3A3A3" strokeWidth={2} />
           <input
             type="text"
-            placeholder="Search skills, names, locations..."
+            placeholder="Search creators, skills, city..."
             value={searchQuery}
-            onChange={(e) => setSearchQuery(e.target.value)}
-            style={{
-              flex: 1,
-              border: 'none',
-              outline: 'none',
-              fontSize: 'var(--text-base)',
-              fontFamily: 'var(--font-family)',
-              background: 'transparent',
-              color: 'var(--color-text-primary)',
-            }}
+            onChange={e => setSearchQuery(e.target.value)}
+            style={{ border: 'none', outline: 'none', backgroundColor: 'transparent', fontSize: '15px', fontFamily: 'var(--font-family)', color: '#111111', flex: 1 }}
           />
         </div>
       </div>
 
-      {/* Categories Horizontal Scroll */}
-      <div
-        style={{
-          display: 'flex',
-          gap: 'var(--space-2)',
-          padding: '0 var(--space-5) var(--space-4) var(--space-5)',
-          overflowX: 'auto',
-          scrollbarWidth: 'none',
-        }}
-      >
-        {CATEGORIES.map((cat) => {
-          const isSelected = selectedCategory === cat;
-          return (
-            <button
-              key={cat}
-              onClick={() => setSelectedCategory(cat)}
-              style={{
-                border: 'none',
-                background: isSelected ? 'var(--color-accent-gold)' : 'rgba(17, 17, 17, 0.03)',
-                color: isSelected ? '#FFFFFF' : 'var(--color-text-secondary)',
-                padding: 'var(--space-2) var(--space-4)',
-                borderRadius: 'var(--radius-sm)',
-                cursor: 'pointer',
-                fontSize: 'var(--text-sm)',
-                fontWeight: 600,
-                whiteSpace: 'nowrap',
-                transition: 'all var(--duration-fast) ease',
-              }}
-            >
-              {cat}
-            </button>
-          );
-        })}
-      </div>
-
-      {/* Creators Visual List */}
-      <div style={{ padding: '0 var(--space-5)', display: 'flex', flexDirection: 'column', gap: 'var(--space-4)' }}>
-        {isLoading ? (
-          <Surface padding="md" style={{ borderRadius: 'var(--radius-lg)' }}>
-            <Text color="secondary">Loading creators directory...</Text>
-          </Surface>
-        ) : filteredCreators.length === 0 ? (
-          <div style={{ textAlign: 'center', padding: 'var(--space-12) 0' }}>
-            <span style={{ fontSize: '32px' }}>🔍</span>
-            <Text variant="h3" style={{ color: 'var(--color-text-secondary)', marginTop: 'var(--space-2)' }}>
-              No creators found
-            </Text>
-          </div>
-        ) : (
-          filteredCreators.map((creator) => (
-            <Surface
-              key={creator.uid}
-              elevated
-              padding="md"
-              style={{
-                borderRadius: 'var(--radius-lg)',
-                border: '1px solid rgba(17, 17, 17, 0.04)',
-                backgroundColor: 'var(--color-bg-surface)',
-                display: 'flex',
-                flexDirection: 'column',
-                gap: 'var(--space-4)',
-                cursor: 'pointer'
-              }}
-              onClick={() => navigate(`/profile/${creator.uid}`)}
-            >
-              {/* Creator Info Row */}
-              <div style={{ display: 'flex', gap: 'var(--space-4)', alignItems: 'center' }}>
-                <img
-                  src={creator.profilePhoto || 'https://images.unsplash.com/photo-1500648767791-00dcc994a43e?q=80&w=200&fit=crop'}
-                  alt={creator.name}
-                  style={{
-                    width: '60px',
-                    height: '60px',
-                    borderRadius: '50%',
-                    objectFit: 'cover'
-                  }}
-                />
-                
-                <div style={{ flex: 1, display: 'flex', flexDirection: 'column' }}>
-                  <div style={{ display: 'flex', alignItems: 'center', gap: 'var(--space-1)' }}>
-                    <Text variant="body" style={{ fontWeight: 700, fontSize: '16px' }}>{creator.name}</Text>
-                    {creator.isVerified && <CheckCircle2 size={15} color="var(--color-accent-gold)" fill="var(--color-accent-gold)" style={{ color: '#FFFFFF' }} />}
-                  </div>
-                  
-                  <Text variant="metadata" color="secondary">@{creator.username}</Text>
-                  
-                  <div style={{ display: 'flex', alignItems: 'center', gap: 'var(--space-1)', marginTop: '4px' }}>
-                    <MapPin size={12} color="var(--color-text-secondary)" />
-                    <span style={{ fontSize: '11px', color: 'var(--color-text-secondary)', fontWeight: 500 }}>
-                      {creator.location || 'India'}
-                    </span>
-                  </div>
-                </div>
-
-                {/* Rating & reviews */}
-                <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'flex-end', gap: '2px' }}>
-                  <div style={{ display: 'flex', alignItems: 'center', gap: '2px' }}>
-                    <Star size={14} color="var(--color-accent-gold)" fill="var(--color-accent-gold)" />
-                    <span style={{ fontSize: '13px', fontWeight: 700 }}>
-                      {creator.reviewRating || '5.0'}
-                    </span>
-                  </div>
-                  <span style={{ fontSize: '10px', color: 'var(--color-text-secondary)' }}>
-                    ({creator.reviewCount || 0} reviews)
-                  </span>
-                </div>
-              </div>
-
-              {/* Bio summary */}
-              <Text variant="metadata" style={{ color: 'var(--color-text-primary)', lineHeight: 1.4 }}>
-                {creator.bio || 'Digital creator. Dedicated to community growth and creative collaboration.'}
-              </Text>
-
-              {/* Skills checklist tags */}
-              {creator.skills && creator.skills.length > 0 && (
-                <div style={{ display: 'flex', flexWrap: 'wrap', gap: 'var(--space-1)' }}>
-                  {creator.skills.slice(0, 3).map((skill, i) => (
-                    <span
-                      key={i}
-                      style={{
-                        fontSize: '10px',
-                        fontWeight: 600,
-                        backgroundColor: 'rgba(17, 17, 17, 0.03)',
-                        color: 'var(--color-text-secondary)',
-                        padding: '2px 8px',
-                        borderRadius: 'var(--radius-sm)'
-                      }}
-                    >
-                      {skill}
-                    </span>
-                  ))}
-                </div>
-              )}
-
-              {/* Action Trigger button */}
-              <Button
-                variant="secondary"
-                fullWidth
+      {/* Category Filters */}
+      <div style={{ paddingLeft: '20px', paddingBottom: '20px', overflowX: 'auto' }}>
+        <div style={{ display: 'flex', gap: '8px', paddingRight: '20px' }}>
+          {(['All', ...ALL_CREATOR_CATEGORIES] as CategoryFilter[]).map(cat => {
+            const active = selectedCategory === cat;
+            const color = cat !== 'All' ? CATEGORY_COLORS[cat as CreatorCategory] : '#111111';
+            return (
+              <button
+                key={cat}
+                onClick={() => setSelectedCategory(cat)}
                 style={{
-                  height: '38px',
-                  borderRadius: 'var(--radius-sm)',
-                  fontSize: 'var(--text-sm)',
-                  fontWeight: 600,
-                  border: '1px solid rgba(17, 17, 17, 0.05)'
+                  flexShrink: 0,
+                  padding: '8px 16px',
+                  borderRadius: '20px',
+                  border: `1.5px solid ${active ? color : 'rgba(17,17,17,0.1)'}`,
+                  backgroundColor: active ? `${color}12` : '#FFFFFF',
+                  color: active ? color : '#737373',
+                  fontSize: '13px',
+                  fontWeight: active ? 700 : 500,
+                  cursor: 'pointer',
+                  fontFamily: 'var(--font-family)',
+                  transition: 'all 0.15s ease',
+                  display: 'flex',
+                  alignItems: 'center',
+                  gap: '6px',
                 }}
               >
-                View living identity
-              </Button>
-            </Surface>
-          ))
-        )}
+                {cat !== 'All' && <span style={{ fontSize: '14px' }}>{CATEGORY_ICONS[cat as CreatorCategory]}</span>}
+                {cat}
+              </button>
+            );
+          })}
+        </div>
       </div>
 
+      {/* Loading */}
+      {isLoading && (
+        <div style={{ display: 'flex', flexDirection: 'column', gap: '12px', padding: '0 20px' }}>
+          {[1, 2, 3].map(i => (
+            <div key={i} className="shimmer" style={{ height: '100px', borderRadius: '20px' }} />
+          ))}
+        </div>
+      )}
+
+      {/* Creators Grid */}
+      {!isLoading && (
+        <div style={{ padding: '0 20px', display: 'flex', flexDirection: 'column', gap: '12px' }}>
+          {filteredCreators.length === 0 && (
+            <div style={{ textAlign: 'center', padding: '48px 20px', color: '#A3A3A3' }}>
+              <div style={{ fontSize: '40px', marginBottom: '12px' }}>🔍</div>
+              <Text variant="body" style={{ fontWeight: 700, color: '#737373' }}>No creators found</Text>
+              <Text variant="metadata" style={{ color: '#A3A3A3', marginTop: '6px' }}>Try a different filter or search term</Text>
+            </div>
+          )}
+
+          {filteredCreators.map(creator => {
+            const topCategory = creator.creatorCategories?.[0];
+            const color = topCategory ? CATEGORY_COLORS[topCategory] : '#D4AF37';
+
+            return (
+              <div
+                key={creator.uid}
+                onClick={() => navigate(`/profile/${creator.uid}`)}
+                style={{
+                  backgroundColor: '#FFFFFF',
+                  borderRadius: '20px',
+                  padding: '16px',
+                  border: `1px solid ${color}18`,
+                  borderLeft: `3px solid ${color}`,
+                  boxShadow: '0 4px 16px -4px rgba(0,0,0,0.06)',
+                  cursor: 'pointer',
+                  transition: 'transform 0.2s ease, box-shadow 0.2s ease',
+                }}
+                onPointerDown={e => { e.currentTarget.style.transform = 'scale(0.99)'; }}
+                onPointerUp={e => { e.currentTarget.style.transform = 'scale(1)'; }}
+              >
+                <div style={{ display: 'flex', gap: '14px', alignItems: 'flex-start' }}>
+                  <img
+                    src={creator.profilePhoto || `https://ui-avatars.com/api/?name=${encodeURIComponent(creator.name)}&background=${color.slice(1)}&color=fff&size=80`}
+                    alt={creator.name}
+                    style={{ width: '56px', height: '56px', borderRadius: '50%', objectFit: 'cover', flexShrink: 0 }}
+                  />
+                  <div style={{ flex: 1, minWidth: 0 }}>
+                    <div style={{ display: 'flex', alignItems: 'center', gap: '8px', marginBottom: '2px' }}>
+                      <Text variant="body" style={{ fontWeight: 800, fontSize: '16px' }}>{creator.name}</Text>
+                      {creator.isVerified && <CheckCircle2 size={14} color="#D4AF37" />}
+                    </div>
+
+                    {/* Category chips */}
+                    {creator.creatorCategories && creator.creatorCategories.length > 0 && (
+                      <div style={{ display: 'flex', flexWrap: 'wrap', gap: '4px', marginBottom: '6px' }}>
+                        {creator.creatorCategories.slice(0, 3).map(cat => (
+                          <span key={cat} style={{ fontSize: '10px', fontWeight: 700, color: CATEGORY_COLORS[cat], backgroundColor: `${CATEGORY_COLORS[cat]}12`, padding: '2px 8px', borderRadius: '999px' }}>
+                            {CATEGORY_ICONS[cat]} {cat}
+                          </span>
+                        ))}
+                      </div>
+                    )}
+
+                    <Text variant="metadata" style={{ color: '#737373', fontSize: '12px', lineHeight: 1.5, overflow: 'hidden', display: '-webkit-box', WebkitLineClamp: 2, WebkitBoxOrient: 'vertical' } as any}>
+                      {creator.bio || 'Member of the Jain community.'}
+                    </Text>
+
+                    {creator.city && (
+                      <div style={{ display: 'flex', alignItems: 'center', gap: '4px', marginTop: '6px' }}>
+                        <MapPin size={11} color="#A3A3A3" />
+                        <span style={{ fontSize: '11px', color: '#A3A3A3', fontFamily: 'var(--font-family)' }}>{creator.city}</span>
+                      </div>
+                    )}
+                  </div>
+                </div>
+
+                {/* Stats row */}
+                <div style={{ display: 'flex', gap: '16px', marginTop: '12px', paddingTop: '12px', borderTop: '1px solid rgba(17,17,17,0.04)' }}>
+                  <div style={{ textAlign: 'center' }}>
+                    <div style={{ fontSize: '14px', fontWeight: 800, color: '#111111' }}>{creator.followersCount || 0}</div>
+                    <div style={{ fontSize: '9px', fontWeight: 600, color: '#A3A3A3', textTransform: 'uppercase', letterSpacing: '0.5px' }}>Followers</div>
+                  </div>
+                  <div style={{ textAlign: 'center' }}>
+                    <div style={{ fontSize: '14px', fontWeight: 800, color: '#111111' }}>{creator.projectsCompleted || 0}</div>
+                    <div style={{ fontSize: '9px', fontWeight: 600, color: '#A3A3A3', textTransform: 'uppercase', letterSpacing: '0.5px' }}>Projects</div>
+                  </div>
+                  <div style={{ textAlign: 'center' }}>
+                    <div style={{ fontSize: '14px', fontWeight: 800, color: '#111111' }}>{creator.hireCount || 0}</div>
+                    <div style={{ fontSize: '9px', fontWeight: 600, color: '#A3A3A3', textTransform: 'uppercase', letterSpacing: '0.5px' }}>Hires</div>
+                  </div>
+                  <div style={{ flex: 1 }} />
+                  <button
+                    onClick={e => { e.stopPropagation(); requireAuth(() => navigate(`/profile/${creator.uid}`)); }}
+                    style={{ padding: '7px 16px', borderRadius: '20px', border: `1.5px solid ${color}`, backgroundColor: `${color}0A`, color: color, fontSize: '12px', fontWeight: 700, cursor: 'pointer', fontFamily: 'var(--font-family)', transition: 'all 0.15s ease' }}
+                  >
+                    View Profile
+                  </button>
+                </div>
+              </div>
+            );
+          })}
+        </div>
+      )}
     </div>
   );
 };
-export default CreatorsScreen;

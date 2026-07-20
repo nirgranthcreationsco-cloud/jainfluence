@@ -1,7 +1,9 @@
 import React, { useEffect, useState } from 'react';
 import { createPortal } from 'react-dom';
 import { useParams, useNavigate } from 'react-router-dom';
-import { ChevronLeft, Settings, CheckCircle2, Grid, Award, LogOut, Check, MessageSquare, PhoneCall, X } from 'lucide-react';
+import { ChevronLeft, Settings, CheckCircle2, Grid, Award, LogOut, Check, MessageSquare, PhoneCall, X, MapPin, ExternalLink } from 'lucide-react';
+import type { UserRole, CreatorCategory } from '../../data/types';
+
 import { useProfileStore } from '../store/profileStore';
 import { useAuthStore } from '../store/authStore';
 import { useFeedStore } from '../store/feedStore';
@@ -230,17 +232,78 @@ export const ProfileScreen: React.FC = () => {
 
         {/* User Identity Details */}
         <div>
-          <div style={{ display: 'flex', alignItems: 'center', gap: 'var(--space-2)' }}>
+          <div style={{ display: 'flex', alignItems: 'center', gap: 'var(--space-2)', flexWrap: 'wrap' }}>
             <Text variant="h2" style={{ fontWeight: 800 }}>{profileUser.name}</Text>
             {profileUser.isVerified && <CheckCircle2 size={16} color="var(--color-accent-gold)" fill="var(--color-accent-gold)" style={{ color: '#FAFAFA' }} />}
           </div>
-          <Text variant="metadata" style={{ color: 'var(--color-text-secondary)', fontWeight: 500 }}>
-            Digital Creator • @{profileUser.username}
+
+          {/* V2 Role Badges */}
+          {profileUser.roles && profileUser.roles.length > 0 && (
+            <div style={{ display: 'flex', flexWrap: 'wrap', gap: '6px', marginTop: '6px' }}>
+              {profileUser.roles.map((role: UserRole) => {
+                const roleColors: Record<string, string> = { Creator: '#7C3AED', Business: '#2563EB', Organization: '#D4AF37', Individual: '#737373' };
+                const color = roleColors[role] || '#737373';
+                return (
+                  <span key={role} style={{ fontSize: '10px', fontWeight: 800, color, backgroundColor: `${color}10`, padding: '3px 10px', borderRadius: '999px', border: `1px solid ${color}25`, textTransform: 'uppercase', letterSpacing: '0.5px' }}>
+                    {role}
+                  </span>
+                );
+              })}
+            </div>
+          )}
+
+          <Text variant="metadata" style={{ color: 'var(--color-text-secondary)', fontWeight: 500, marginTop: '4px' }}>
+            @{profileUser.username}
           </Text>
 
+          {/* City */}
+          {profileUser.city && (
+            <div style={{ display: 'flex', alignItems: 'center', gap: '4px', marginTop: '4px' }}>
+              <MapPin size={12} color="#A3A3A3" />
+              <span style={{ fontSize: '12px', color: '#A3A3A3', fontFamily: 'var(--font-family)' }}>{profileUser.city}</span>
+            </div>
+          )}
+
+          {/* V2 Creator Category Chips */}
+          {profileUser.creatorCategories && profileUser.creatorCategories.length > 0 && (
+            <div style={{ display: 'flex', flexWrap: 'wrap', gap: '6px', marginTop: '10px' }}>
+              {profileUser.creatorCategories.map((cat: CreatorCategory) => (
+                <span key={cat} style={{ fontSize: '11px', fontWeight: 700, color: '#7C3AED', backgroundColor: 'rgba(124,58,237,0.08)', padding: '4px 10px', borderRadius: '999px', border: '1px solid rgba(124,58,237,0.15)' }}>
+                  {cat}
+                </span>
+              ))}
+            </div>
+          )}
+
           <Text variant="body" style={{ marginTop: 'var(--space-3)', color: 'var(--color-text-primary)', lineHeight: 1.5 }}>
-            {profileUser.bio || 'Digital citizen of the Jain community. Exploring art, philosophy, and ahimsa.'}
+            {profileUser.professionalSummary || profileUser.bio || 'Digital citizen of the Jain community. Exploring art, philosophy, and ahimsa.'}
           </Text>
+
+          {/* Instagram & Portfolio links */}
+          {(profileUser.instagramUrl || profileUser.portfolioUrl) && (
+            <div style={{ display: 'flex', gap: '8px', marginTop: '12px', flexWrap: 'wrap' }}>
+              {profileUser.instagramUrl && (
+                <a
+                  href={profileUser.instagramUrl.startsWith('http') ? profileUser.instagramUrl : `https://instagram.com/${profileUser.instagramUrl}`}
+                  target="_blank"
+                  rel="noopener noreferrer"
+                  style={{ display: 'flex', alignItems: 'center', gap: '6px', padding: '6px 14px', borderRadius: '20px', border: '1.5px solid rgba(219,39,119,0.3)', backgroundColor: 'rgba(219,39,119,0.05)', color: '#DB2777', fontSize: '12px', fontWeight: 700, textDecoration: 'none', fontFamily: 'var(--font-family)' }}
+                >
+                  <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><rect x="2" y="2" width="20" height="20" rx="5" ry="5"/><path d="M16 11.37A4 4 0 1 1 12.63 8 4 4 0 0 1 16 11.37z"/><line x1="17.5" y1="6.5" x2="17.51" y2="6.5"/></svg> Instagram
+                </a>
+              )}
+              {profileUser.portfolioUrl && (
+                <a
+                  href={profileUser.portfolioUrl}
+                  target="_blank"
+                  rel="noopener noreferrer"
+                  style={{ display: 'flex', alignItems: 'center', gap: '6px', padding: '6px 14px', borderRadius: '20px', border: '1.5px solid rgba(37,99,235,0.2)', backgroundColor: 'rgba(37,99,235,0.04)', color: '#2563EB', fontSize: '12px', fontWeight: 700, textDecoration: 'none', fontFamily: 'var(--font-family)' }}
+                >
+                  <ExternalLink size={13} /> Portfolio
+                </a>
+              )}
+            </div>
+          )}
 
           {/* New Identity Metrics: Community Reputation */}
           <div style={{ marginTop: 'var(--space-4)', display: 'flex', flexDirection: 'column', gap: 'var(--space-2)' }}>
